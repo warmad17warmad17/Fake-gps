@@ -214,8 +214,8 @@ fun MainScreen(viewModel: MainViewModel) {
                     showFavorites = showFavoritesOnMap,
                     historyList = historyList,
                     favoritesList = favoritesList,
-                    onLocationSelected = { lat, lng ->
-                        viewModel.selectLocation(lat, lng)
+                    onLocationSelected = { lat, lng, fromUser ->
+                        viewModel.selectLocation(lat, lng, fromUser)
                     },
                     onStartMock = {
                         viewModel.startMock(context)

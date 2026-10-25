@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -79,7 +80,7 @@ fun InteractiveMap(
     showFavorites: Boolean,
     historyList: List<LocationHistoryEntity>,
     favoritesList: List<LocationFavoriteEntity>,
-    onLocationSelected: (Double, Double) -> Unit,
+    onLocationSelected: (Double, Double, Boolean) -> Unit,
     onStartMock: () -> Unit,
     onStopMock: () -> Unit,
     onDeleteHistory: (Long) -> Unit,
@@ -173,7 +174,7 @@ fun InteractiveMap(
                             val tapWorldX = currWorldX + (tapOffset.x - centerX)
                             val tapWorldY = currWorldY + (tapOffset.y - centerY)
                             val (tapLat, tapLon) = MapProjection.worldPixelToLatLon(tapWorldX, tapWorldY, zoomLevel)
-                            onLocationSelected(tapLat, tapLon)
+                            onLocationSelected(tapLat, tapLon, true)
                         },
                         onDoubleTap = {
                             zoomLevel = (zoomLevel + 1.0).coerceAtMost(19.0)
@@ -262,7 +263,7 @@ fun InteractiveMap(
                             .clickable {
                                 // Select this history pin and open the action popup
                                 selectedHistoryItem = hist
-                                onLocationSelected(hist.latitude, hist.longitude)
+                                onLocationSelected(hist.latitude, hist.longitude, false)
                             }
                             .testTag("history_pin_${hist.id}")
                     ) {
@@ -376,7 +377,7 @@ fun InteractiveMap(
                         modifier = Modifier
                             .offset { IntOffset((sx - 15.dp.toPx()).roundToInt(), (sy - 34.dp.toPx()).roundToInt()) }
                             .clickable {
-                                onLocationSelected(fav.latitude, fav.longitude)
+                                onLocationSelected(fav.latitude, fav.longitude, false)
                             }
                     ) {
                         PinMarker(
@@ -388,20 +389,53 @@ fun InteractiveMap(
             }
         }
 
-        // Selected / Active Coordinate: Authentic Google Maps Blue Dot
+        // Selected / Active Coordinate: Authentic Google Maps Blue Dot (Directly Draggable!)
         run {
             val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
             val (selWorldX, selWorldY) = MapProjection.latLonToWorldPixel(selectedLat, selectedLng, zoomLevel)
             val selScreenX = centerX + (selWorldX - currWorldX).toFloat()
             val selScreenY = centerY + (selWorldY - currWorldY).toFloat()
 
-            // Google Maps Blue Dot centered exactly at (selScreenX, selScreenY)
+            var isDraggingDot by remember { mutableStateOf(false) }
+            var dragOffsetPx by remember { mutableStateOf(Offset.Zero) }
+
+            val displayX = if (isDraggingDot) selScreenX + dragOffsetPx.x else selScreenX
+            val displayY = if (isDraggingDot) selScreenY + dragOffsetPx.y else selScreenY
+
+            // Google Maps Blue Dot centered exactly at (displayX, displayY)
             GoogleMapsBlueDot(
+                isDragging = isDraggingDot,
                 modifier = Modifier
                     .offset {
                         IntOffset(
-                            (selScreenX - 22.dp.toPx()).roundToInt(),
-                            (selScreenY - 22.dp.toPx()).roundToInt()
+                            (displayX - 22.dp.toPx()).roundToInt(),
+                            (displayY - 22.dp.toPx()).roundToInt()
+                        )
+                    }
+                    .pointerInput(centerLat, centerLng, zoomLevel, selectedLat, selectedLng) {
+                        detectDragGestures(
+                            onDragStart = {
+                                isDraggingDot = true
+                                dragOffsetPx = Offset.Zero
+                            },
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                dragOffsetPx += dragAmount
+                            },
+                            onDragEnd = {
+                                isDraggingDot = false
+                                val finalScreenX = selScreenX + dragOffsetPx.x
+                                val finalScreenY = selScreenY + dragOffsetPx.y
+                                val finalWorldX = currWorldX + (finalScreenX - centerX)
+                                val finalWorldY = currWorldY + (finalScreenY - centerY)
+                                val (newLat, newLon) = MapProjection.worldPixelToLatLon(finalWorldX, finalWorldY, zoomLevel)
+                                dragOffsetPx = Offset.Zero
+                                onLocationSelected(newLat, newLon, true)
+                            },
+                            onDragCancel = {
+                                isDraggingDot = false
+                                dragOffsetPx = Offset.Zero
+                            }
                         )
                     }
                     .testTag("google_maps_blue_dot")
@@ -578,26 +612,28 @@ fun InteractiveMap(
  * - Pulsing outer light blue halo
  * - Crisp white ring
  * - Solid royal Google Blue core dot
+ * - Visual elevation feedback when dragged
  */
 @Composable
 fun GoogleMapsBlueDot(
+    isDragging: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "google_blue_dot_pulse")
     val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.85f,
-        targetValue = 1.25f,
+        initialValue = if (isDragging) 1.15f else 0.85f,
+        targetValue = if (isDragging) 1.45f else 1.25f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = LinearEasing),
+            animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "scale"
     )
     val pulseAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.12f,
+        initialValue = if (isDragging) 0.45f else 0.35f,
+        targetValue = if (isDragging) 0.20f else 0.12f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1400, easing = LinearEasing),
+            animation = tween(1200, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "alpha"
@@ -618,14 +654,14 @@ fun GoogleMapsBlueDot(
         Surface(
             shape = CircleShape,
             color = Color.White,
-            shadowElevation = 3.dp,
-            modifier = Modifier.size(20.dp)
+            shadowElevation = if (isDragging) 8.dp else 3.dp,
+            modifier = Modifier.size(if (isDragging) 24.dp else 20.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 // 3. Inner solid royal blue dot
                 Box(
                     modifier = Modifier
-                        .size(13.dp)
+                        .size(if (isDragging) 16.dp else 13.dp)
                         .background(Color(0xFF1A73E8), CircleShape)
                 )
             }

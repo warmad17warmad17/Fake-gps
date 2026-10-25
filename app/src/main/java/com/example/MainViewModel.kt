@@ -63,13 +63,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun selectLocation(lat: Double, lng: Double) {
+    fun selectLocation(lat: Double, lng: Double, fromUserAction: Boolean = false) {
+        val prevLat = _selectedLat.value
+        val prevLng = _selectedLng.value
+
         _selectedLat.value = lat
         _selectedLng.value = lng
 
         // If actively mocking, update the active mock position seamlessly
         if (isMocking.value) {
             MockLocationService.updateLocation(getApplication(), lat, lng)
+
+            // If user moved/dragged to a new position while mocking, generate a new history entry!
+            if (fromUserAction) {
+                val dist = kotlin.math.abs(lat - prevLat) + kotlin.math.abs(lng - prevLng)
+                if (dist > 0.00005) { // At least ~5-10 meters moved
+                    viewModelScope.launch {
+                        repository.addHistory(lat, lng)
+                    }
+                }
+            }
         }
     }
 
