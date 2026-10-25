@@ -54,7 +54,7 @@
             android:src="@drawable/ic_widget_target"
             android:contentDescription="Stop / Buka Fake GPS"
             android:padding="6dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless" />
+            android:background="@android:color/transparent" />
     </LinearLayout>
 
     <!-- List of Favorite Locations -->

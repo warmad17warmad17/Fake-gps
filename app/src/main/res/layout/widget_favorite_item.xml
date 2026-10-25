@@ -9,35 +9,18 @@
     android:paddingStart="16dp"
     android:paddingEnd="12dp">
 
-    <!-- Location Name & Subtitle -->
-    <LinearLayout
+    <!-- Location Name Only -->
+    <TextView
+        android:id="@+id/item_name"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:orientation="vertical">
-
-        <TextView
-            android:id="@+id/item_name"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Lokasi Favorit"
-            android:textColor="#212121"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:singleLine="true"
-            android:ellipsize="end" />
-
-        <TextView
-            android:id="@+id/item_coords"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Lat: 0.000000, Lng: 0.000000"
-            android:textColor="#757575"
-            android:textSize="11sp"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:layout_marginTop="1dp" />
-    </LinearLayout>
+        android:text="Lokasi Favorit"
+        android:textColor="#212121"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:singleLine="true"
+        android:ellipsize="end" />
 
     <!-- Start / Stop Button (GPS Target or Red Stop) -->
     <ImageView
@@ -47,6 +30,6 @@
         android:padding="8dp"
         android:src="@drawable/ic_widget_target_blue"
         android:contentDescription="Mulai / Berhenti Mock Lokasi"
-        android:background="?android:attr/selectableItemBackgroundBorderless" />
+        android:background="@android:color/transparent" />
 
 </LinearLayout>

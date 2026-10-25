@@ -26,7 +26,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "fake_gps_database"
-                ).fallbackToDestructiveMigration().build()
+                )
+                    .fallbackToDestructiveMigration()
+                    .allowMainThreadQueries()
+                    .build()
                 INSTANCE = instance
                 instance
             }

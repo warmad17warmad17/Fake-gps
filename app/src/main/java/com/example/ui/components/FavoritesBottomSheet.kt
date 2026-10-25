@@ -15,13 +15,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Widgets
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.platform.LocalContext
+import com.example.ui.theme.FakeGpsPrimary
+import com.example.widget.WidgetHelper
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,7 +83,64 @@ fun FavoritesBottomSheet(
                 )
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            val context = LocalContext.current
+
+            // Quick Pin Widget to Home Screen Card
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = FakeGpsPrimary.copy(alpha = 0.08f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(FakeGpsPrimary.copy(alpha = 0.15f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Widgets,
+                            contentDescription = null,
+                            tint = FakeGpsPrimary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Widget Layar Utama",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = FakeGpsPrimary
+                        )
+                        Text(
+                            text = "Pasang widget ke Home Screen untuk start/stop lokasi favorit",
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            WidgetHelper.pinWidgetToHomeScreen(context)
+                        },
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.testTag("pin_widget_button")
+                    ) {
+                        Text("Pasang", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             if (favoritesList.isEmpty()) {
                 Box(

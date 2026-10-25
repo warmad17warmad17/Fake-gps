@@ -2,11 +2,14 @@ package com.example.widget
 
 import android.content.Context
 import android.content.Intent
+import android.os.Binder
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import com.example.FakeGpsApp
 import com.example.R
 import com.example.data.model.LocationFavoriteEntity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 
 class FavoritesWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
@@ -19,16 +22,24 @@ class FavoritesRemoteViewsFactory(private val context: Context) : RemoteViewsSer
     private var favoritesList: List<LocationFavoriteEntity> = emptyList()
 
     override fun onCreate() {
-        loadFavorites()
+        // onCreate is invoked on the main thread when binding to the service.
+        // Do not query database here to avoid blocking UI thread or violating threading rules.
+        // onDataSetChanged is automatically invoked on an IPC worker thread immediately following onCreate.
     }
 
     override fun onDataSetChanged() {
-        loadFavorites()
-    }
-
-    private fun loadFavorites() {
-        val app = context.applicationContext as? FakeGpsApp
-        favoritesList = app?.database?.locationDao()?.getAllFavoritesList() ?: emptyList()
+        val identityToken = Binder.clearCallingIdentity()
+        try {
+            val app = context.applicationContext as? FakeGpsApp
+            favoritesList = runBlocking(Dispatchers.IO) {
+                app?.database?.locationDao()?.getAllFavoritesList() ?: emptyList()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            favoritesList = emptyList()
+        } finally {
+            Binder.restoreCallingIdentity(identityToken)
+        }
     }
 
     override fun onDestroy() {
@@ -43,7 +54,6 @@ class FavoritesRemoteViewsFactory(private val context: Context) : RemoteViewsSer
 
         val views = RemoteViews(context.packageName, R.layout.widget_favorite_item)
         views.setTextViewText(R.id.item_name, fav.name)
-        views.setTextViewText(R.id.item_coords, "Lat: %.6f, Lng: %.6f".format(fav.latitude, fav.longitude))
 
         val prefs = context.getSharedPreferences(FavoritesWidgetProvider.PREFS_NAME, Context.MODE_PRIVATE)
         val isMocking = prefs.getBoolean(FavoritesWidgetProvider.KEY_IS_MOCKING, false)

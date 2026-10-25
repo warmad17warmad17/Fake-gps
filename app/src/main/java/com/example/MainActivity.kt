@@ -52,6 +52,7 @@ import com.example.ui.components.TopAppBarFakeGps
 import com.example.ui.components.openDeveloperSettings
 import com.example.ui.map.InteractiveMap
 import com.example.ui.theme.MyApplicationTheme
+import com.example.widget.FavoritesWidgetProvider
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
@@ -62,6 +63,9 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Sync and refresh home screen widgets when app opens
+        FavoritesWidgetProvider.updateAllWidgets(this)
 
         setContent {
             MyApplicationTheme {

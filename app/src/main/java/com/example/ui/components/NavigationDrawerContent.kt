@@ -24,8 +24,10 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PinDrop
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.Divider
 import androidx.compose.material3.HorizontalDivider
+import com.example.widget.WidgetHelper
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationDrawerItem
@@ -178,6 +180,19 @@ fun NavigationDrawerContent(
             modifier = Modifier
                 .padding(NavigationDrawerItemDefaults.ItemPadding)
                 .testTag("drawer_save_current_fav_item")
+        )
+
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Default.Widgets, contentDescription = null, tint = FakeGpsPrimary) },
+            label = { Text("Pasang Widget ke Layar Utama") },
+            selected = false,
+            onClick = {
+                onCloseDrawer()
+                WidgetHelper.pinWidgetToHomeScreen(context)
+            },
+            modifier = Modifier
+                .padding(NavigationDrawerItemDefaults.ItemPadding)
+                .testTag("drawer_pin_widget_item")
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))

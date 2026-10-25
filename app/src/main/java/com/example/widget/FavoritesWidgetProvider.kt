@@ -101,7 +101,7 @@ class FavoritesWidgetProvider : AppWidgetProvider() {
             // 4. Remote adapter for list
             val serviceIntent = Intent(context, FavoritesWidgetService::class.java).apply {
                 putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-                data = Uri.parse(toUri(Intent.URI_INTENT_SCHEME))
+                data = Uri.parse("fakegps://widget/id/$appWidgetId")
             }
             views.setRemoteAdapter(R.id.widget_list_view, serviceIntent)
             views.setEmptyView(R.id.widget_list_view, R.id.widget_empty_view)

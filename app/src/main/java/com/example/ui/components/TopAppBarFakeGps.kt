@@ -6,10 +6,13 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.ui.platform.LocalContext
+import com.example.widget.WidgetHelper
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -113,10 +116,22 @@ fun TopAppBarFakeGps(
                 )
             }
 
+            val context = LocalContext.current
+
             DropdownMenu(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false }
             ) {
+                DropdownMenuItem(
+                    text = { Text("Pasang Widget Layar Utama") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Widgets, contentDescription = null, tint = FakeGpsPrimary)
+                    },
+                    onClick = {
+                        showMenu = false
+                        WidgetHelper.pinWidgetToHomeScreen(context)
+                    }
+                )
                 DropdownMenuItem(
                     text = { Text("Cari / Masukkan Koordinat") },
                     onClick = {
