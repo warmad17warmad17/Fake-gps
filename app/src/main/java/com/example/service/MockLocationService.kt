@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.example.FakeGpsApp
 import com.example.MainActivity
 import com.example.R
+import com.example.widget.FavoritesWidgetProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -34,9 +35,14 @@ class MockLocationService : Service() {
 
         const val EXTRA_LATITUDE = "extra_latitude"
         const val EXTRA_LONGITUDE = "extra_longitude"
+        const val EXTRA_LOCATION_NAME = "extra_location_name"
+        const val EXTRA_FAVORITE_ID = "extra_favorite_id"
 
         private val _isMockingRunning = MutableStateFlow(false)
         val isMockingRunning = _isMockingRunning.asStateFlow()
+
+        private val _activeLocationName = MutableStateFlow<String?>(null)
+        val activeLocationName = _activeLocationName.asStateFlow()
 
         private val _currentMockCoords = MutableStateFlow<Pair<Double, Double>?>(null)
         val currentMockCoords = _currentMockCoords.asStateFlow()
@@ -52,11 +58,21 @@ class MockLocationService : Service() {
             _mockError.value = message
         }
 
-        fun start(context: Context, latitude: Double, longitude: Double) {
+        fun start(
+            context: Context,
+            latitude: Double,
+            longitude: Double,
+            locationName: String? = null,
+            favoriteId: Long = -1L
+        ) {
             val intent = Intent(context, MockLocationService::class.java).apply {
                 action = ACTION_START
                 putExtra(EXTRA_LATITUDE, latitude)
                 putExtra(EXTRA_LONGITUDE, longitude)
+                if (locationName != null) {
+                    putExtra(EXTRA_LOCATION_NAME, locationName)
+                }
+                putExtra(EXTRA_FAVORITE_ID, favoriteId)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)
@@ -92,6 +108,24 @@ class MockLocationService : Service() {
             ACTION_START -> {
                 val lat = intent.getDoubleExtra(EXTRA_LATITUDE, 0.0)
                 val lng = intent.getDoubleExtra(EXTRA_LONGITUDE, 0.0)
+                val locName = intent.getStringExtra(EXTRA_LOCATION_NAME)
+                val favId = intent.getLongExtra(EXTRA_FAVORITE_ID, -1L)
+
+                if (locName != null) {
+                    _activeLocationName.value = locName
+                }
+
+                // Sync SharedPreferences for Home Screen Widget
+                val prefs = getSharedPreferences(FavoritesWidgetProvider.PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putBoolean(FavoritesWidgetProvider.KEY_IS_MOCKING, true)
+                    .putString(FavoritesWidgetProvider.KEY_ACTIVE_NAME, _activeLocationName.value ?: "")
+                    .putLong(FavoritesWidgetProvider.KEY_ACTIVE_ID, favId)
+                    .putString(FavoritesWidgetProvider.KEY_ACTIVE_LAT, lat.toString())
+                    .putString(FavoritesWidgetProvider.KEY_ACTIVE_LNG, lng.toString())
+                    .apply()
+
+                FavoritesWidgetProvider.updateAllWidgets(this)
 
                 // CRITICAL: Call startForeground IMMEDIATELY to satisfy Android requirement
                 val notification = buildNotification(lat, lng)
@@ -114,8 +148,17 @@ class MockLocationService : Service() {
                 updateNotification(lat, lng)
             }
             ACTION_STOP -> {
+                val prefs = getSharedPreferences(FavoritesWidgetProvider.PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putBoolean(FavoritesWidgetProvider.KEY_IS_MOCKING, false)
+                    .putString(FavoritesWidgetProvider.KEY_ACTIVE_NAME, "")
+                    .putLong(FavoritesWidgetProvider.KEY_ACTIVE_ID, -1L)
+                    .apply()
+                _activeLocationName.value = null
+
                 stopMockLoop()
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                FavoritesWidgetProvider.updateAllWidgets(this)
                 stopSelf()
             }
         }
@@ -189,9 +232,15 @@ class MockLocationService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val contentText = if (!_activeLocationName.value.isNullOrBlank()) {
+            "${_activeLocationName.value} (%.6f, %.6f)".format(latitude, longitude)
+        } else {
+            "Lokasi: %.6f, %.6f".format(latitude, longitude)
+        }
+
         return NotificationCompat.Builder(this, FakeGpsApp.CHANNEL_ID)
             .setContentTitle("Fake GPS Aktif")
-            .setContentText("Lokasi: %.6f, %.6f".format(latitude, longitude))
+            .setContentText(contentText)
             .setSmallIcon(R.drawable.fake_gps_icon_1792932593937)
             .setContentIntent(mainPendingIntent)
             .setOngoing(true)

@@ -29,6 +29,9 @@ interface LocationDao {
     @Query("SELECT * FROM location_favorites ORDER BY timestamp DESC")
     fun getAllFavorites(): Flow<List<LocationFavoriteEntity>>
 
+    @Query("SELECT * FROM location_favorites ORDER BY timestamp DESC")
+    fun getAllFavoritesList(): List<LocationFavoriteEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFavorite(favorite: LocationFavoriteEntity): Long
 

@@ -5,4 +5,6 @@
     <string name="history_title">Riwayat Lokasi</string>
     <string name="favorites_title">Lokasi Favorit</string>
     <string name="filter_title">Filter Tampilan Peta</string>
+    <string name="widget_name">Fake GPS Favorit</string>
+    <string name="widget_description">Pilih dan aktifkan lokasi favorit langsung dari layar utama</string>
 </resources>

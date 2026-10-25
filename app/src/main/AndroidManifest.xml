@@ -43,6 +43,28 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <!-- App Widget Provider for Home Screen Favorite Locations -->
+        <receiver
+            android:name=".widget.FavoritesWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.example.widget.ACTION_START_MOCK" />
+                <action android:name="com.example.widget.ACTION_STOP_MOCK" />
+                <action android:name="com.example.widget.ACTION_REFRESH_WIDGET" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/favorites_widget_info" />
+        </receiver>
+
+        <!-- RemoteViewsService for Widget ListView -->
+        <service
+            android:name=".widget.FavoritesWidgetService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
+            android:exported="false" />
+
     </application>
 
 </manifest>

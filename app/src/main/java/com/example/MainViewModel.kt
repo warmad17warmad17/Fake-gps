@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import com.example.widget.FavoritesWidgetProvider
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -92,11 +93,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val lat = _selectedLat.value
         val lng = _selectedLng.value
 
-        MockLocationService.start(context, lat, lng)
+        val currentFav = favoritesList.value.find {
+            kotlin.math.abs(it.latitude - lat) < 0.0001 && kotlin.math.abs(it.longitude - lng) < 0.0001
+        }
+
+        MockLocationService.start(
+            context = context,
+            latitude = lat,
+            longitude = lng,
+            locationName = currentFav?.name,
+            favoriteId = currentFav?.id ?: -1L
+        )
 
         // Save to History when started
         viewModelScope.launch {
-            repository.addHistory(lat, lng)
+            repository.addHistory(lat, lng, currentFav?.name ?: "")
         }
     }
 
@@ -119,18 +130,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun addFavorite(name: String, lat: Double, lng: Double, description: String = "") {
         viewModelScope.launch {
             repository.addFavorite(name, lat, lng, description)
+            FavoritesWidgetProvider.updateAllWidgets(getApplication())
         }
     }
 
     fun updateFavorite(favorite: LocationFavoriteEntity) {
         viewModelScope.launch {
             repository.updateFavorite(favorite)
+            FavoritesWidgetProvider.updateAllWidgets(getApplication())
         }
     }
 
     fun deleteFavorite(favorite: LocationFavoriteEntity) {
         viewModelScope.launch {
             repository.deleteFavorite(favorite.id)
+            FavoritesWidgetProvider.updateAllWidgets(getApplication())
         }
     }
 
