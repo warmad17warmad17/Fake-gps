@@ -1,0 +1,6 @@
+{
+  "name": "Fake GPS",
+  "description": "Aplikasi Android native untuk memalsukan lokasi GPS (Mock Location) dengan antarmuka peta interaktif, riwayat, dan favorit lokasi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

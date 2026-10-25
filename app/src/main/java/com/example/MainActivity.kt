@@ -1,0 +1,375 @@
+package com.example
+
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.LocationFavoriteEntity
+import com.example.data.model.LocationHistoryEntity
+import com.example.ui.components.AddFavoriteDialog
+import com.example.ui.components.CoordinateInputDialog
+import com.example.ui.components.DeveloperOptionsGuideDialog
+import com.example.ui.components.EditFavoriteDialog
+import com.example.ui.components.FavoritesBottomSheet
+import com.example.ui.components.FilterDialog
+import com.example.ui.components.HistoryBottomSheet
+import com.example.ui.components.NavigationDrawerContent
+import com.example.ui.components.TopAppBarFakeGps
+import com.example.ui.components.openDeveloperSettings
+import com.example.ui.map.InteractiveMap
+import com.example.ui.theme.MyApplicationTheme
+import kotlinx.coroutines.launch
+import kotlin.math.abs
+
+class MainActivity : ComponentActivity() {
+
+    private val viewModel: MainViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+
+        setContent {
+            MyApplicationTheme {
+                MainScreen(viewModel = viewModel)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(viewModel: MainViewModel) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+
+    val selectedLat by viewModel.selectedLat.collectAsStateWithLifecycle()
+    val selectedLng by viewModel.selectedLng.collectAsStateWithLifecycle()
+    val isMocking by viewModel.isMocking.collectAsStateWithLifecycle()
+    val mockError by viewModel.mockError.collectAsStateWithLifecycle()
+
+    val showHistoryOnMap by viewModel.showHistory.collectAsStateWithLifecycle()
+    val showFavoritesOnMap by viewModel.showFavorites.collectAsStateWithLifecycle()
+
+    val historyList by viewModel.historyList.collectAsStateWithLifecycle()
+    val favoritesList by viewModel.favoritesList.collectAsStateWithLifecycle()
+
+    // Determine if the selected coordinates match any saved favorite
+    val selectedFavorite = remember(selectedLat, selectedLng, favoritesList) {
+        favoritesList.find {
+            abs(it.latitude - selectedLat) < 0.0001 && abs(it.longitude - selectedLng) < 0.0001
+        }
+    }
+
+    // Dialog & Sheet States
+    var showFilterDialog by remember { mutableStateOf(false) }
+    var showAddFavoriteDialog by remember { mutableStateOf(false) }
+    var addFavInitialName by remember { mutableStateOf("") }
+    var favoriteToEdit by remember { mutableStateOf<LocationFavoriteEntity?>(null) }
+    var showCoordinateInputDialog by remember { mutableStateOf(false) }
+    var showDevGuideDialog by remember { mutableStateOf(false) }
+
+    var showHistorySheet by remember { mutableStateOf(false) }
+    var showFavoritesSheet by remember { mutableStateOf(false) }
+
+    val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val favoritesSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // Permission launcher for Location and Post Notifications
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (!locationGranted) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Izin lokasi diperlukan untuk fungsi Mock Location")
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val permissionsToRequest = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        val needed = permissionsToRequest.filter {
+            ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (needed.isNotEmpty()) {
+            permissionLauncher.launch(needed.toTypedArray())
+        }
+    }
+
+    LaunchedEffect(isMocking) {
+        if (isMocking) {
+            snackbarHostState.showSnackbar("Mock Location aktif pada %.6f, %.6f".format(selectedLat, selectedLng))
+        }
+    }
+
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            NavigationDrawerContent(
+                isMocking = isMocking,
+                historyCount = historyList.size,
+                favoritesCount = favoritesList.size,
+                onShowHistory = { showHistorySheet = true },
+                onShowFavorites = { showFavoritesSheet = true },
+                onAddCurrentToFavorite = {
+                    addFavInitialName = ""
+                    showAddFavoriteDialog = true
+                },
+                onSearchCoordinate = { showCoordinateInputDialog = true },
+                onShowFilter = { showFilterDialog = true },
+                onShowDevGuide = { showDevGuideDialog = true },
+                onCloseDrawer = {
+                    coroutineScope.launch { drawerState.close() }
+                }
+            )
+        }
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBarFakeGps(
+                    isMocking = isMocking,
+                    onMenuClick = {
+                        coroutineScope.launch { drawerState.open() }
+                    },
+                    onStartMock = {
+                        viewModel.startMock(context)
+                    },
+                    onStopMock = {
+                        viewModel.stopMock(context)
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Mock Location dihentikan")
+                        }
+                    },
+                    onFilterClick = { showFilterDialog = true },
+                    onSearchCoordinateClick = { showCoordinateInputDialog = true },
+                    onOpenDeveloperOptions = { showDevGuideDialog = true },
+                    onShowHistory = { showHistorySheet = true },
+                    onShowFavorites = { showFavoritesSheet = true },
+                    onClearHistory = {
+                        viewModel.clearAllHistory()
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Semua riwayat lokasi telah dihapus")
+                        }
+                    }
+                )
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                // Interactive Map Engine
+                InteractiveMap(
+                    selectedLat = selectedLat,
+                    selectedLng = selectedLng,
+                    isMocking = isMocking,
+                    showHistory = showHistoryOnMap,
+                    showFavorites = showFavoritesOnMap,
+                    historyList = historyList,
+                    favoritesList = favoritesList,
+                    onLocationSelected = { lat, lng ->
+                        viewModel.selectLocation(lat, lng)
+                    },
+                    onStartMock = {
+                        viewModel.startMock(context)
+                    },
+                    onStopMock = {
+                        viewModel.stopMock(context)
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Mock Location dihentikan")
+                        }
+                    },
+                    onDeleteHistory = { id ->
+                        viewModel.deleteHistory(id)
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Riwayat lokasi telah dihapus")
+                        }
+                    },
+                    onAddHistoryToFavorite = { hist ->
+                        viewModel.selectLocation(hist.latitude, hist.longitude)
+                        addFavInitialName = if (hist.label.isNotBlank() && !hist.label.startsWith("Lat:")) hist.label else "Location ${hist.id}"
+                        showAddFavoriteDialog = true
+                    }
+                )
+            }
+        }
+    }
+
+    // Filter Dialog
+    if (showFilterDialog) {
+        FilterDialog(
+            showHistory = showHistoryOnMap,
+            showFavorites = showFavoritesOnMap,
+            onToggleHistory = { viewModel.toggleFilterHistory(it) },
+            onToggleFavorites = { viewModel.toggleFilterFavorites(it) },
+            onDismiss = { showFilterDialog = false }
+        )
+    }
+
+    // Add Favorite Dialog (Set Favorite Data)
+    if (showAddFavoriteDialog) {
+        AddFavoriteDialog(
+            latitude = selectedLat,
+            longitude = selectedLng,
+            initialTitle = addFavInitialName,
+            onConfirm = { title, description ->
+                viewModel.addFavorite(title, selectedLat, selectedLng, description)
+                showAddFavoriteDialog = false
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("'$title' berhasil ditambahkan ke favorit")
+                }
+            },
+            onDismiss = { showAddFavoriteDialog = false }
+        )
+    }
+
+    // Edit Favorite Dialog
+    if (favoriteToEdit != null) {
+        EditFavoriteDialog(
+            favorite = favoriteToEdit!!,
+            onConfirm = { updated ->
+                viewModel.updateFavorite(updated)
+                favoriteToEdit = null
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Nama favorit diperbarui menjadi '${updated.name}'")
+                }
+            },
+            onDismiss = { favoriteToEdit = null }
+        )
+    }
+
+    // Coordinate Input Dialog
+    if (showCoordinateInputDialog) {
+        CoordinateInputDialog(
+            currentLat = selectedLat,
+            currentLng = selectedLng,
+            onConfirm = { lat, lng ->
+                viewModel.selectLocation(lat, lng)
+                showCoordinateInputDialog = false
+            },
+            onDismiss = { showCoordinateInputDialog = false }
+        )
+    }
+
+    // Developer Options Guide Dialog
+    if (showDevGuideDialog) {
+        DeveloperOptionsGuideDialog(
+            onDismiss = { showDevGuideDialog = false }
+        )
+    }
+
+    // Error Alert Dialog (if Developer options mock location app is not configured)
+    if (mockError != null) {
+        AlertDialog(
+            onDismissRequest = { viewModel.clearMockError() },
+            title = { Text("Peringatan Mock Location") },
+            text = { Text(mockError ?: "") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearMockError()
+                        openDeveloperSettings(context)
+                    },
+                    modifier = Modifier.testTag("error_dialog_open_settings_button")
+                ) {
+                    Text("Buka Opsi Pengembang")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { viewModel.clearMockError() },
+                    modifier = Modifier.testTag("error_dialog_dismiss_button")
+                ) {
+                    Text("Tutup")
+                }
+            }
+        )
+    }
+
+    // History Bottom Sheet
+    if (showHistorySheet) {
+        HistoryBottomSheet(
+            sheetState = historySheetState,
+            historyList = historyList,
+            onSelectLocation = { lat, lng ->
+                viewModel.selectLocation(lat, lng)
+            },
+            onAddToFavorite = { historyItem ->
+                addFavInitialName = "Lokasi ${historyItem.id}"
+                showAddFavoriteDialog = true
+            },
+            onDeleteHistory = { id ->
+                viewModel.deleteHistory(id)
+            },
+            onClearAllHistory = {
+                viewModel.clearAllHistory()
+            },
+            onDismiss = { showHistorySheet = false }
+        )
+    }
+
+    // Favorites Bottom Sheet
+    if (showFavoritesSheet) {
+        FavoritesBottomSheet(
+            sheetState = favoritesSheetState,
+            favoritesList = favoritesList,
+            onSelectFavorite = { fav ->
+                viewModel.selectLocation(fav.latitude, fav.longitude)
+            },
+            onEditFavorite = { fav ->
+                favoriteToEdit = fav
+            },
+            onDeleteFavorite = { fav ->
+                viewModel.deleteFavorite(fav)
+            },
+            onDismiss = { showFavoritesSheet = false }
+        )
+    }
+}

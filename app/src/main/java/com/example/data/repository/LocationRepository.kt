@@ -1,0 +1,53 @@
+package com.example.data.repository
+
+import com.example.data.db.LocationDao
+import com.example.data.model.LocationFavoriteEntity
+import com.example.data.model.LocationHistoryEntity
+import kotlinx.coroutines.flow.Flow
+
+class LocationRepository(private val locationDao: LocationDao) {
+
+    val allHistory: Flow<List<LocationHistoryEntity>> = locationDao.getAllHistory()
+    val allFavorites: Flow<List<LocationFavoriteEntity>> = locationDao.getAllFavorites()
+
+    suspend fun addHistory(latitude: Double, longitude: Double, label: String = ""): Long {
+        return locationDao.insertHistory(
+            LocationHistoryEntity(
+                latitude = latitude,
+                longitude = longitude,
+                label = label.ifBlank { "Lat: %.6f, Lng: %.6f".format(latitude, longitude) }
+            )
+        )
+    }
+
+    suspend fun deleteHistory(id: Long) {
+        locationDao.deleteHistory(id)
+    }
+
+    suspend fun clearHistory() {
+        locationDao.clearAllHistory()
+    }
+
+    suspend fun addFavorite(name: String, latitude: Double, longitude: Double, description: String = ""): Long {
+        return locationDao.insertFavorite(
+            LocationFavoriteEntity(
+                name = name.ifBlank { "Lokasi Favorit" },
+                latitude = latitude,
+                longitude = longitude,
+                description = description
+            )
+        )
+    }
+
+    suspend fun updateFavorite(favorite: LocationFavoriteEntity) {
+        locationDao.updateFavorite(favorite)
+    }
+
+    suspend fun deleteFavorite(id: Long) {
+        locationDao.deleteFavorite(id)
+    }
+
+    suspend fun getFavoriteById(id: Long): LocationFavoriteEntity? {
+        return locationDao.getFavoriteById(id)
+    }
+}
