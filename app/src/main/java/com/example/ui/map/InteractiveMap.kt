@@ -99,6 +99,10 @@ fun InteractiveMap(
     // Selected history item for showing Delete & Add to Favorite action popup
     var selectedHistoryItem by remember { mutableStateOf<LocationHistoryEntity?>(null) }
 
+    // Blue dot drag state
+    var isDraggingDot by remember { mutableStateOf(false) }
+    var dragOffsetPx by remember { mutableStateOf(Offset.Zero) }
+
     // Listen to tiles updates
     LaunchedEffect(Unit) {
         tileManager.tileRefreshTrigger.collect {
@@ -390,57 +394,62 @@ fun InteractiveMap(
         }
 
         // Selected / Active Coordinate: Authentic Google Maps Blue Dot (Directly Draggable!)
-        run {
-            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
-            val (selWorldX, selWorldY) = MapProjection.latLonToWorldPixel(selectedLat, selectedLng, zoomLevel)
-            val selScreenX = centerX + (selWorldX - currWorldX).toFloat()
-            val selScreenY = centerY + (selWorldY - currWorldY).toFloat()
+        val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
+        val (selWorldX, selWorldY) = MapProjection.latLonToWorldPixel(selectedLat, selectedLng, zoomLevel)
+        val selScreenX = centerX + (selWorldX - currWorldX).toFloat()
+        val selScreenY = centerY + (selWorldY - currWorldY).toFloat()
 
-            var isDraggingDot by remember { mutableStateOf(false) }
-            var dragOffsetPx by remember { mutableStateOf(Offset.Zero) }
+        val displayX = if (isDraggingDot) selScreenX + dragOffsetPx.x else selScreenX
+        val displayY = if (isDraggingDot) selScreenY + dragOffsetPx.y else selScreenY
 
-            val displayX = if (isDraggingDot) selScreenX + dragOffsetPx.x else selScreenX
-            val displayY = if (isDraggingDot) selScreenY + dragOffsetPx.y else selScreenY
-
-            // Google Maps Blue Dot centered exactly at (displayX, displayY)
-            GoogleMapsBlueDot(
-                isDragging = isDraggingDot,
-                modifier = Modifier
-                    .offset {
-                        IntOffset(
-                            (displayX - 22.dp.toPx()).roundToInt(),
-                            (displayY - 22.dp.toPx()).roundToInt()
-                        )
-                    }
-                    .pointerInput(centerLat, centerLng, zoomLevel, selectedLat, selectedLng) {
-                        detectDragGestures(
-                            onDragStart = {
-                                isDraggingDot = true
-                                dragOffsetPx = Offset.Zero
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                dragOffsetPx += dragAmount
-                            },
-                            onDragEnd = {
-                                isDraggingDot = false
-                                val finalScreenX = selScreenX + dragOffsetPx.x
-                                val finalScreenY = selScreenY + dragOffsetPx.y
-                                val finalWorldX = currWorldX + (finalScreenX - centerX)
-                                val finalWorldY = currWorldY + (finalScreenY - centerY)
-                                val (newLat, newLon) = MapProjection.worldPixelToLatLon(finalWorldX, finalWorldY, zoomLevel)
-                                dragOffsetPx = Offset.Zero
-                                onLocationSelected(newLat, newLon, true)
-                            },
-                            onDragCancel = {
-                                isDraggingDot = false
-                                dragOffsetPx = Offset.Zero
-                            }
-                        )
-                    }
-                    .testTag("google_maps_blue_dot")
-            )
+        // Active coordinates for display (HUD Card)
+        val activeDisplayCoords = if (isDraggingDot) {
+            val dragWorldX = currWorldX + (displayX - centerX)
+            val dragWorldY = currWorldY + (displayY - centerY)
+            MapProjection.worldPixelToLatLon(dragWorldX, dragWorldY, zoomLevel)
+        } else {
+            Pair(selectedLat, selectedLng)
         }
+
+        // Google Maps Blue Dot centered exactly at (displayX, displayY)
+        GoogleMapsBlueDot(
+            isDragging = isDraggingDot,
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        (displayX - 22.dp.toPx()).roundToInt(),
+                        (displayY - 22.dp.toPx()).roundToInt()
+                    )
+                }
+                .pointerInput(centerLat, centerLng, zoomLevel, selectedLat, selectedLng) {
+                    detectDragGestures(
+                        onDragStart = {
+                            isDraggingDot = true
+                            dragOffsetPx = Offset.Zero
+                            selectedHistoryItem = null
+                        },
+                        onDrag = { change, dragAmount ->
+                            change.consume()
+                            dragOffsetPx += dragAmount
+                        },
+                        onDragEnd = {
+                            isDraggingDot = false
+                            val finalScreenX = selScreenX + dragOffsetPx.x
+                            val finalScreenY = selScreenY + dragOffsetPx.y
+                            val finalWorldX = currWorldX + (finalScreenX - centerX)
+                            val finalWorldY = currWorldY + (finalScreenY - centerY)
+                            val (newLat, newLon) = MapProjection.worldPixelToLatLon(finalWorldX, finalWorldY, zoomLevel)
+                            dragOffsetPx = Offset.Zero
+                            onLocationSelected(newLat, newLon, true)
+                        },
+                        onDragCancel = {
+                            isDraggingDot = false
+                            dragOffsetPx = Offset.Zero
+                        }
+                    )
+                }
+                .testTag("google_maps_blue_dot")
+        )
 
         // Top Right Controls (Recenter, Layer Switcher, Zoom In/Out)
         Column(
@@ -545,7 +554,7 @@ fun InteractiveMap(
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        text = "%.6f".format(selectedLat),
+                        text = "%.6f".format(activeDisplayCoords.first),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF212121),
@@ -563,7 +572,7 @@ fun InteractiveMap(
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        text = "%.6f".format(selectedLng),
+                        text = "%.6f".format(activeDisplayCoords.second),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = Color(0xFF212121),
