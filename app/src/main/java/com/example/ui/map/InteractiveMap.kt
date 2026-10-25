@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -29,6 +31,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Remove
@@ -61,6 +67,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.LocationFavoriteEntity
@@ -110,6 +117,12 @@ fun InteractiveMap(
     var isDraggingDot by remember { mutableStateOf(false) }
     var dragOffsetPx by remember { mutableStateOf(Offset.Zero) }
 
+    // Micro-precision coordinate nudge pad (for exact meter-level adjustments at full zoom)
+    var showNudgePad by remember { mutableStateOf(false) }
+    var nudgeStepIndex by remember { mutableIntStateOf(0) }
+    val nudgeSteps = remember { listOf(0.000005, 0.00001, 0.00005, 0.00010) }
+    val nudgeLabels = remember { listOf("±0.5m", "±1m", "±5m", "±10m") }
+
     // Synchronize selected favorite if database changes (e.g. edited name or deleted)
     LaunchedEffect(favoritesList) {
         if (selectedFavoriteItem != null) {
@@ -130,7 +143,7 @@ fun InteractiveMap(
         val centerX = widthPx / 2f
         val centerY = heightPx / 2f
 
-        val zoomInt = zoomLevel.roundToInt().coerceIn(3, 19)
+        val zoomInt = zoomLevel.roundToInt().coerceIn(3, 22)
         val effectiveZoom = zoomInt.toDouble()
 
         // Fetch visible Google Maps tiles outside Draw phase
@@ -154,6 +167,11 @@ fun InteractiveMap(
                     if (ty in 0 until maxTilesAcross) {
                         val normTx = ((tx % maxTilesAcross) + maxTilesAcross) % maxTilesAcross
                         neededTiles.add(Triple(zoomInt, normTx, ty))
+                        // Also prefetch parent tile at zoom 20 if zoomInt > 20 so fallback is always instantly ready
+                        if (zoomInt > 20) {
+                            val pDiff = zoomInt - 20
+                            neededTiles.add(Triple(20, normTx shr pDiff, ty shr pDiff))
+                        }
                     }
                 }
             }
@@ -166,12 +184,25 @@ fun InteractiveMap(
                 .fillMaxSize()
                 .pointerInput(Unit) {
                     detectTransformGestures { _, pan, zoom, _ ->
-                        val newZoom = (zoomLevel + (zoom - 1f) * 1.8).coerceIn(3.0, 19.0)
-                        zoomLevel = newZoom
+                        // 1. Gentle zoom with deadzone to prevent accidental zooming during panning
+                        if (kotlin.math.abs(zoom - 1f) > 0.02f) {
+                            val zoomDelta = ((zoom - 1f) * 0.55).coerceIn(-0.25, 0.25)
+                            zoomLevel = (zoomLevel + zoomDelta).coerceIn(3.0, 22.0)
+                        }
+
+                        // 2. Adaptive pan damping based on zoom level:
+                        // At zoom 3: ~0.50f (responsive)
+                        // At zoom 18-22 (full zoom): 0.12f - 0.20f (ultra-fine micro-precision)
+                        val zoomRatio = ((zoomLevel - 3.0) / 19.0).coerceIn(0.0, 1.0)
+                        val panDamping = (0.50 - (zoomRatio * 0.38)).toFloat()
+                        val maxStep = (20f - (zoomRatio * 16f).toFloat()).coerceAtLeast(3f)
+
+                        val smoothPanX = (pan.x * panDamping).coerceIn(-maxStep, maxStep)
+                        val smoothPanY = (pan.y * panDamping).coerceIn(-maxStep, maxStep)
 
                         val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
-                        val newWorldX = currWorldX - pan.x
-                        val newWorldY = currWorldY - pan.y
+                        val newWorldX = currWorldX - smoothPanX
+                        val newWorldY = currWorldY - smoothPanY
                         val (newLat, newLon) = MapProjection.worldPixelToLatLon(newWorldX, newWorldY, effectiveZoom)
                         centerLat = newLat.coerceIn(-85.0, 85.0)
                         centerLng = ((newLon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
@@ -224,8 +255,14 @@ fun InteractiveMap(
                                 onLocationSelected(tapLat, tapLon, true)
                             }
                         },
-                        onDoubleTap = {
-                            zoomLevel = (zoomLevel + 1.0).coerceAtMost(19.0)
+                        onDoubleTap = { tapOffset ->
+                            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
+                            val tapWorldX = currWorldX + (tapOffset.x - centerX)
+                            val tapWorldY = currWorldY + (tapOffset.y - centerY)
+                            val (tapLat, tapLon) = MapProjection.worldPixelToLatLon(tapWorldX, tapWorldY, effectiveZoom)
+                            centerLat = tapLat
+                            centerLng = tapLon
+                            zoomLevel = (zoomLevel + 1.0).coerceAtMost(22.0)
                         }
                     )
                 }
@@ -236,7 +273,7 @@ fun InteractiveMap(
             val bgColor = if (tileManager.currentTileType == MapTileType.GOOGLE_SATELLITE) Color(0xFF1E262C) else Color(0xFFF2F4F7)
             drawRect(bgColor)
 
-            val zoomInt = zoomLevel.roundToInt().coerceIn(3, 19)
+            val zoomInt = zoomLevel.roundToInt().coerceIn(3, 22)
             val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomInt.toDouble())
 
             val minWorldX = centerWorldX - centerX
@@ -276,20 +313,40 @@ fun InteractiveMap(
                 gy += gridStep
             }
 
-            // Draw Google Maps Slippy Tiles
+            // Draw Google Maps Slippy Tiles with graceful fallback for zoom 21-22
             for (tx in minTileX..maxTileX) {
                 for (ty in minTileY..maxTileY) {
                     if (ty in 0 until maxTilesAcross) {
                         val normTx = ((tx % maxTilesAcross) + maxTilesAcross) % maxTilesAcross
                         val tileBitmap = tileManager.getCachedTile(zoomInt, normTx, ty)
 
+                        val tileScreenX = (tx * tileSize - minWorldX).toFloat()
+                        val tileScreenY = (ty * tileSize - minWorldY).toFloat()
+
                         if (tileBitmap != null) {
-                            val tileScreenX = (tx * tileSize - minWorldX).toFloat()
-                            val tileScreenY = (ty * tileSize - minWorldY).toFloat()
                             drawImage(
                                 image = tileBitmap,
                                 topLeft = Offset(tileScreenX, tileScreenY)
                             )
+                        } else if (zoomInt > 20) {
+                            // High-zoom oversampling fallback: crop and scale parent tile from zoom 20
+                            val pDiff = zoomInt - 20
+                            val pTx = normTx shr pDiff
+                            val pTy = ty shr pDiff
+                            val parentTile = tileManager.getCachedTile(20, pTx, pTy)
+                            if (parentTile != null) {
+                                val subSize = 256 shr pDiff
+                                val subMask = (1 shl pDiff) - 1
+                                val subX = (normTx and subMask) * subSize
+                                val subY = (ty and subMask) * subSize
+                                drawImage(
+                                    image = parentTile,
+                                    srcOffset = IntOffset(subX, subY),
+                                    srcSize = IntSize(subSize, subSize),
+                                    dstOffset = IntOffset(tileScreenX.roundToInt(), tileScreenY.roundToInt()),
+                                    dstSize = IntSize(tileSize.roundToInt(), tileSize.roundToInt())
+                                )
+                            }
                         }
                     }
                 }
@@ -703,7 +760,7 @@ fun InteractiveMap(
 
             // Zoom In
             IconButton(
-                onClick = { zoomLevel = (zoomLevel + 1.0).coerceAtMost(19.0) },
+                onClick = { zoomLevel = (zoomLevel + 1.0).coerceAtMost(22.0) },
                 modifier = Modifier
                     .size(38.dp)
                     .background(Color.White, CircleShape)
@@ -732,54 +789,155 @@ fun InteractiveMap(
             }
         }
 
-        // Bottom Left Coordinates HUD Card (Exact style from screenshot)
+        // Bottom Coordinates HUD Card with optional Micro-Precision Nudge Controls
         Card(
-            shape = RoundedCornerShape(4.dp),
+            shape = RoundedCornerShape(8.dp),
             colors = CardDefaults.cardColors(containerColor = Color.White),
             elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 24.dp)
+                .padding(bottom = 20.dp)
                 .testTag("coordinates_hud_card")
         ) {
             Column(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(
-                        text = "Latitude: ",
-                        fontSize = 13.sp,
-                        color = Color(0xFF212121),
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        text = "%.6f".format(activeDisplayCoords.first),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF212121),
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Column {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Lat: ",
+                                fontSize = 12.sp,
+                                color = Color(0xFF616161),
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "%.6f".format(activeDisplayCoords.first),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF212121),
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Lng: ",
+                                fontSize = 12.sp,
+                                color = Color(0xFF616161),
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "%.6f".format(activeDisplayCoords.second),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF212121),
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    // Micro-precision toggle button
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (showNudgePad) FakeGpsPrimary else Color(0xFFEEEEEE),
+                        modifier = Modifier
+                            .clickable { showNudgePad = !showNudgePad }
+                            .padding(horizontal = 6.dp, vertical = 4.dp)
+                            .testTag("toggle_nudge_pad_button")
+                    ) {
+                        Text(
+                            text = if (showNudgePad) "Tutup" else "Presisi ±1m",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (showNudgePad) Color.White else Color(0xFF424242)
+                        )
+                    }
                 }
-                Row(
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Longitude: ",
-                        fontSize = 13.sp,
-                        color = Color(0xFF212121),
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        text = "%.6f".format(activeDisplayCoords.second),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF212121),
-                        fontFamily = FontFamily.Monospace
-                    )
+
+                if (showNudgePad) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(top = 2.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFFE0F2F1),
+                            modifier = Modifier
+                                .clickable {
+                                    nudgeStepIndex = (nudgeStepIndex + 1) % nudgeSteps.size
+                                }
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = nudgeLabels[nudgeStepIndex],
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF00796B)
+                            )
+                        }
+
+                        val step = nudgeSteps[nudgeStepIndex]
+
+                        // Left (West)
+                        IconButton(
+                            onClick = {
+                                val nextLng = ((selectedLng - step + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+                                onLocationSelected(selectedLat, nextLng, true)
+                                centerLng = nextLng
+                            },
+                            modifier = Modifier.size(28.dp).background(Color(0xFFF5F5F5), CircleShape)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Geser Barat", modifier = Modifier.size(18.dp), tint = Color(0xFF424242))
+                        }
+
+                        // Up (North)
+                        IconButton(
+                            onClick = {
+                                val nextLat = (selectedLat + step).coerceIn(-85.0, 85.0)
+                                onLocationSelected(nextLat, selectedLng, true)
+                                centerLat = nextLat
+                            },
+                            modifier = Modifier.size(28.dp).background(Color(0xFFF5F5F5), CircleShape)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Geser Utara", modifier = Modifier.size(18.dp), tint = Color(0xFF424242))
+                        }
+
+                        // Down (South)
+                        IconButton(
+                            onClick = {
+                                val nextLat = (selectedLat - step).coerceIn(-85.0, 85.0)
+                                onLocationSelected(nextLat, selectedLng, true)
+                                centerLat = nextLat
+                            },
+                            modifier = Modifier.size(28.dp).background(Color(0xFFF5F5F5), CircleShape)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Geser Selatan", modifier = Modifier.size(18.dp), tint = Color(0xFF424242))
+                        }
+
+                        // Right (East)
+                        IconButton(
+                            onClick = {
+                                val nextLng = ((selectedLng + step + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+                                onLocationSelected(selectedLat, nextLng, true)
+                                centerLng = nextLng
+                            },
+                            modifier = Modifier.size(28.dp).background(Color(0xFFF5F5F5), CircleShape)
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Geser Timur", modifier = Modifier.size(18.dp), tint = Color(0xFF424242))
+                        }
+                    }
                 }
             }
         }
