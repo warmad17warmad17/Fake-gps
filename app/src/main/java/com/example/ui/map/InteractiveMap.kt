@@ -124,26 +124,19 @@ fun InteractiveMap(
         }
     }
 
-    // Keep camera synchronized if selected coordinate changes externally
-    LaunchedEffect(selectedLat, selectedLng) {
-        val dist = kotlin.math.abs(selectedLat - centerLat) + kotlin.math.abs(selectedLng - centerLng)
-        if (dist > 0.05) {
-            centerLat = selectedLat
-            centerLng = selectedLng
-        }
-    }
-
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val widthPx = constraints.maxWidth.toFloat().coerceAtLeast(1f)
         val heightPx = constraints.maxHeight.toFloat().coerceAtLeast(1f)
         val centerX = widthPx / 2f
         val centerY = heightPx / 2f
 
+        val zoomInt = zoomLevel.roundToInt().coerceIn(3, 19)
+        val effectiveZoom = zoomInt.toDouble()
+
         // Fetch visible Google Maps tiles outside Draw phase
-        LaunchedEffect(centerLat, centerLng, zoomLevel, widthPx, heightPx, tileManager.currentTileType) {
+        LaunchedEffect(centerLat, centerLng, effectiveZoom, widthPx, heightPx, tileManager.currentTileType) {
             delay(40)
-            val zoomInt = zoomLevel.roundToInt().coerceIn(3, 19)
-            val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomInt.toDouble())
+            val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
             val minWorldX = centerWorldX - centerX
             val maxWorldX = centerWorldX + centerX
             val minWorldY = centerWorldY - centerY
@@ -176,23 +169,23 @@ fun InteractiveMap(
                         val newZoom = (zoomLevel + (zoom - 1f) * 1.8).coerceIn(3.0, 19.0)
                         zoomLevel = newZoom
 
-                        val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
+                        val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
                         val newWorldX = currWorldX - pan.x
                         val newWorldY = currWorldY - pan.y
-                        val (newLat, newLon) = MapProjection.worldPixelToLatLon(newWorldX, newWorldY, zoomLevel)
+                        val (newLat, newLon) = MapProjection.worldPixelToLatLon(newWorldX, newWorldY, effectiveZoom)
                         centerLat = newLat.coerceIn(-85.0, 85.0)
                         centerLng = ((newLon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
                     }
                 }
-                .pointerInput(centerLat, centerLng, zoomLevel, favoritesList, showFavorites) {
+                .pointerInput(centerLat, centerLng, effectiveZoom, favoritesList, historyList, showFavorites, showHistory) {
                     detectTapGestures(
                         onTap = { tapOffset ->
-                            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
+                            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
 
-                            // Check if tapped directly on/near any favorite marker (40dp radius)
+                            // 1. Check if tapped directly on/near any favorite marker (36dp radius)
                             val tappedFav = if (showFavorites) {
                                 favoritesList.find { fav ->
-                                    val (fwX, fwY) = MapProjection.latLonToWorldPixel(fav.latitude, fav.longitude, zoomLevel)
+                                    val (fwX, fwY) = MapProjection.latLonToWorldPixel(fav.latitude, fav.longitude, effectiveZoom)
                                     val fx = centerX + (fwX - currWorldX).toFloat()
                                     val fy = centerY + (fwY - currWorldY).toFloat() - 17.dp.toPx()
                                     val dx = fx - tapOffset.x
@@ -201,16 +194,33 @@ fun InteractiveMap(
                                 }
                             } else null
 
+                            // 2. Check if tapped directly on/near any history marker (36dp radius)
+                            val tappedHist = if (showHistory && tappedFav == null) {
+                                historyList.find { hist ->
+                                    val (hwX, hwY) = MapProjection.latLonToWorldPixel(hist.latitude, hist.longitude, effectiveZoom)
+                                    val hx = centerX + (hwX - currWorldX).toFloat()
+                                    val hy = centerY + (hwY - currWorldY).toFloat() - 17.dp.toPx()
+                                    val dx = hx - tapOffset.x
+                                    val dy = hy - tapOffset.y
+                                    (dx * dx + dy * dy) <= (36.dp.toPx() * 36.dp.toPx())
+                                }
+                            } else null
+
                             if (tappedFav != null) {
+                                // Select favorite to inspect/edit without moving blue dot
                                 selectedFavoriteItem = tappedFav
                                 selectedHistoryItem = null
-                                onLocationSelected(tappedFav.latitude, tappedFav.longitude, false)
+                            } else if (tappedHist != null) {
+                                // Select history to inspect/favorite without moving blue dot
+                                selectedHistoryItem = tappedHist
+                                selectedFavoriteItem = null
                             } else {
+                                // Tap on map: move the blue dot ONLY, leaving existing history and favorites intact
                                 selectedHistoryItem = null
                                 selectedFavoriteItem = null
                                 val tapWorldX = currWorldX + (tapOffset.x - centerX)
                                 val tapWorldY = currWorldY + (tapOffset.y - centerY)
-                                val (tapLat, tapLon) = MapProjection.worldPixelToLatLon(tapWorldX, tapWorldY, zoomLevel)
+                                val (tapLat, tapLon) = MapProjection.worldPixelToLatLon(tapWorldX, tapWorldY, effectiveZoom)
                                 onLocationSelected(tapLat, tapLon, true)
                             }
                         },
@@ -288,9 +298,9 @@ fun InteractiveMap(
 
         // Overlay Markers for History (BLUE pins)
         if (showHistory) {
-            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
+            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
             for (hist in historyList) {
-                val (hwX, hwY) = MapProjection.latLonToWorldPixel(hist.latitude, hist.longitude, zoomLevel)
+                val (hwX, hwY) = MapProjection.latLonToWorldPixel(hist.latitude, hist.longitude, effectiveZoom)
                 val sx = centerX + (hwX - currWorldX).toFloat()
                 val sy = centerY + (hwY - currWorldY).toFloat()
 
@@ -299,9 +309,9 @@ fun InteractiveMap(
                         modifier = Modifier
                             .offset { IntOffset((sx - 15.dp.toPx()).roundToInt(), (sy - 34.dp.toPx()).roundToInt()) }
                             .clickable {
-                                // Select this history pin and open the action popup
+                                // Select this history pin to view options WITHOUT moving the blue dot
                                 selectedHistoryItem = hist
-                                onLocationSelected(hist.latitude, hist.longitude, false)
+                                selectedFavoriteItem = null
                             }
                             .testTag("history_pin_${hist.id}")
                     ) {
@@ -317,8 +327,8 @@ fun InteractiveMap(
         // Action popup and label above clicked History pin (matching user's red circle screenshot)
         if (selectedHistoryItem != null && showHistory) {
             val hist = selectedHistoryItem!!
-            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
-            val (hwX, hwY) = MapProjection.latLonToWorldPixel(hist.latitude, hist.longitude, zoomLevel)
+            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
+            val (hwX, hwY) = MapProjection.latLonToWorldPixel(hist.latitude, hist.longitude, effectiveZoom)
             val hx = centerX + (hwX - currWorldX).toFloat()
             val hy = centerY + (hwY - currWorldY).toFloat()
 
@@ -328,14 +338,14 @@ fun InteractiveMap(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                (hx - 70.dp.toPx()).roundToInt(),
+                                (hx - 80.dp.toPx()).roundToInt(),
                                 (hy - 110.dp.toPx()).roundToInt()
                             )
                         }
-                        .size(width = 140.dp, height = 80.dp),
+                        .size(width = 160.dp, height = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    // Floating Action Pill: Delete & Add to Favorite (Circled in red in screenshot)
+                    // Floating Action Pill: Delete, Add to Favorite, and Optional Set Blue Dot
                     Surface(
                         shape = RoundedCornerShape(4.dp),
                         color = Color(0xEEFFFFFF),
@@ -343,7 +353,7 @@ fun InteractiveMap(
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             // Delete button (Trash can)
@@ -360,7 +370,7 @@ fun InteractiveMap(
                                     imageVector = Icons.Default.Delete,
                                     contentDescription = "Hapus History",
                                     tint = Color(0xFF616161),
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
@@ -378,7 +388,24 @@ fun InteractiveMap(
                                     imageVector = Icons.Default.Favorite,
                                     contentDescription = "Tambah ke Favorit",
                                     tint = FakeGpsFavoriteRed,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+
+                            // Move Blue Dot to this History point (optional user action)
+                            IconButton(
+                                onClick = {
+                                    onLocationSelected(hist.latitude, hist.longitude, true)
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("history_pin_set_location_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GpsFixed,
+                                    contentDescription = "Pindahkan Titik Biru ke Sini",
+                                    tint = FakeGpsPrimary,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
@@ -404,9 +431,9 @@ fun InteractiveMap(
 
         // Overlay Markers for Favorites (RED pins)
         if (showFavorites) {
-            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
+            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
             for (fav in favoritesList) {
-                val (fwX, fwY) = MapProjection.latLonToWorldPixel(fav.latitude, fav.longitude, zoomLevel)
+                val (fwX, fwY) = MapProjection.latLonToWorldPixel(fav.latitude, fav.longitude, effectiveZoom)
                 val sx = centerX + (fwX - currWorldX).toFloat()
                 val sy = centerY + (fwY - currWorldY).toFloat()
 
@@ -415,9 +442,9 @@ fun InteractiveMap(
                         modifier = Modifier
                             .offset { IntOffset((sx - 15.dp.toPx()).roundToInt(), (sy - 34.dp.toPx()).roundToInt()) }
                             .clickable {
+                                // Select this favorite pin to view callout WITHOUT moving the blue dot
                                 selectedFavoriteItem = fav
                                 selectedHistoryItem = null
-                                onLocationSelected(fav.latitude, fav.longitude, false)
                             }
                             .testTag("favorite_pin_${fav.id}")
                     ) {
@@ -433,8 +460,8 @@ fun InteractiveMap(
         // Callout displaying favorite name above clicked Favorite pin (Speech bubble with downward pointer)
         if (selectedFavoriteItem != null && showFavorites) {
             val fav = selectedFavoriteItem!!
-            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
-            val (fwX, fwY) = MapProjection.latLonToWorldPixel(fav.latitude, fav.longitude, zoomLevel)
+            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
+            val (fwX, fwY) = MapProjection.latLonToWorldPixel(fav.latitude, fav.longitude, effectiveZoom)
             val fx = centerX + (fwX - currWorldX).toFloat()
             val fy = centerY + (fwY - currWorldY).toFloat()
 
@@ -487,7 +514,7 @@ fun InteractiveMap(
             }
         }
 
-        // Floating Action Buttons for Selected Favorite (Delete & Edit, exactly matching user screenshot)
+        // Floating Action Buttons for Selected Favorite (Delete, Edit, & Set Blue Dot)
         if (selectedFavoriteItem != null && showFavorites) {
             val fav = selectedFavoriteItem!!
             Row(
@@ -495,7 +522,7 @@ fun InteractiveMap(
                     .align(Alignment.TopCenter)
                     .padding(top = 16.dp)
                     .testTag("selected_favorite_actions_row"),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Delete favorite button (trash can icon)
@@ -542,12 +569,34 @@ fun InteractiveMap(
                         )
                     }
                 }
+
+                // Move Blue Dot to this Favorite point (explicit user action)
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xCCE0E0E0),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clickable {
+                            onLocationSelected(fav.latitude, fav.longitude, true)
+                        }
+                        .testTag("favorite_set_location_action_button")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.GpsFixed,
+                            contentDescription = "Pindahkan Titik Biru ke Favorit Ini",
+                            tint = FakeGpsPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
             }
         }
 
         // Selected / Active Coordinate: Authentic Google Maps Blue Dot (Directly Draggable!)
-        val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
-        val (selWorldX, selWorldY) = MapProjection.latLonToWorldPixel(selectedLat, selectedLng, zoomLevel)
+        val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
+        val (selWorldX, selWorldY) = MapProjection.latLonToWorldPixel(selectedLat, selectedLng, effectiveZoom)
         val selScreenX = centerX + (selWorldX - currWorldX).toFloat()
         val selScreenY = centerY + (selWorldY - currWorldY).toFloat()
 
@@ -558,7 +607,7 @@ fun InteractiveMap(
         val activeDisplayCoords = if (isDraggingDot) {
             val dragWorldX = currWorldX + (displayX - centerX)
             val dragWorldY = currWorldY + (displayY - centerY)
-            MapProjection.worldPixelToLatLon(dragWorldX, dragWorldY, zoomLevel)
+            MapProjection.worldPixelToLatLon(dragWorldX, dragWorldY, effectiveZoom)
         } else {
             Pair(selectedLat, selectedLng)
         }
@@ -573,7 +622,7 @@ fun InteractiveMap(
                         (displayY - 22.dp.toPx()).roundToInt()
                     )
                 }
-                .pointerInput(centerLat, centerLng, zoomLevel, selectedLat, selectedLng) {
+                .pointerInput(centerLat, centerLng, effectiveZoom, selectedLat, selectedLng) {
                     detectDragGestures(
                         onDragStart = {
                             isDraggingDot = true
@@ -591,7 +640,7 @@ fun InteractiveMap(
                             val finalScreenY = selScreenY + dragOffsetPx.y
                             val finalWorldX = currWorldX + (finalScreenX - centerX)
                             val finalWorldY = currWorldY + (finalScreenY - centerY)
-                            val (newLat, newLon) = MapProjection.worldPixelToLatLon(finalWorldX, finalWorldY, zoomLevel)
+                            val (newLat, newLon) = MapProjection.worldPixelToLatLon(finalWorldX, finalWorldY, effectiveZoom)
                             dragOffsetPx = Offset.Zero
                             onLocationSelected(newLat, newLon, true)
                         },

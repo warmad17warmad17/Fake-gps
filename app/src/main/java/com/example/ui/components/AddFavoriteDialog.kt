@@ -74,6 +74,13 @@ fun AddFavoriteDialog(
                         .fillMaxWidth()
                         .testTag("favorite_description_input")
                 )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Koordinat: %.6f, %.6f".format(latitude, longitude),
+                    fontSize = 12.sp,
+                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    color = Color(0xFF616161)
+                )
             }
         },
         confirmButton = {

@@ -101,6 +101,8 @@ fun MainScreen(viewModel: MainViewModel) {
     var showFilterDialog by remember { mutableStateOf(false) }
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
     var addFavInitialName by remember { mutableStateOf("") }
+    var targetFavLat by remember { mutableStateOf(selectedLat) }
+    var targetFavLng by remember { mutableStateOf(selectedLng) }
     var favoriteToEdit by remember { mutableStateOf<LocationFavoriteEntity?>(null) }
     var showCoordinateInputDialog by remember { mutableStateOf(false) }
     var showDevGuideDialog by remember { mutableStateOf(false) }
@@ -157,6 +159,8 @@ fun MainScreen(viewModel: MainViewModel) {
                 onShowFavorites = { showFavoritesSheet = true },
                 onAddCurrentToFavorite = {
                     addFavInitialName = ""
+                    targetFavLat = selectedLat
+                    targetFavLng = selectedLng
                     showAddFavoriteDialog = true
                 },
                 onSearchCoordinate = { showCoordinateInputDialog = true },
@@ -233,7 +237,8 @@ fun MainScreen(viewModel: MainViewModel) {
                         }
                     },
                     onAddHistoryToFavorite = { hist ->
-                        viewModel.selectLocation(hist.latitude, hist.longitude)
+                        targetFavLat = hist.latitude
+                        targetFavLng = hist.longitude
                         addFavInitialName = if (hist.label.isNotBlank() && !hist.label.startsWith("Lat:")) hist.label else "Location ${hist.id}"
                         showAddFavoriteDialog = true
                     },
@@ -265,11 +270,11 @@ fun MainScreen(viewModel: MainViewModel) {
     // Add Favorite Dialog (Set Favorite Data)
     if (showAddFavoriteDialog) {
         AddFavoriteDialog(
-            latitude = selectedLat,
-            longitude = selectedLng,
+            latitude = targetFavLat,
+            longitude = targetFavLng,
             initialTitle = addFavInitialName,
             onConfirm = { title, description ->
-                viewModel.addFavorite(title, selectedLat, selectedLng, description)
+                viewModel.addFavorite(title, targetFavLat, targetFavLng, description)
                 showAddFavoriteDialog = false
                 coroutineScope.launch {
                     snackbarHostState.showSnackbar("'$title' berhasil ditambahkan ke favorit")
@@ -351,7 +356,9 @@ fun MainScreen(viewModel: MainViewModel) {
                 viewModel.selectLocation(lat, lng)
             },
             onAddToFavorite = { historyItem ->
-                addFavInitialName = "Lokasi ${historyItem.id}"
+                targetFavLat = historyItem.latitude
+                targetFavLng = historyItem.longitude
+                addFavInitialName = if (historyItem.label.isNotBlank() && !historyItem.label.startsWith("Lat:")) historyItem.label else "Lokasi ${historyItem.id}"
                 showAddFavoriteDialog = true
             },
             onDeleteHistory = { id ->
