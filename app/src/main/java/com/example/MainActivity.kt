@@ -236,6 +236,15 @@ fun MainScreen(viewModel: MainViewModel) {
                         viewModel.selectLocation(hist.latitude, hist.longitude)
                         addFavInitialName = if (hist.label.isNotBlank() && !hist.label.startsWith("Lat:")) hist.label else "Location ${hist.id}"
                         showAddFavoriteDialog = true
+                    },
+                    onEditFavorite = { fav ->
+                        favoriteToEdit = fav
+                    },
+                    onDeleteFavorite = { fav ->
+                        viewModel.deleteFavorite(fav)
+                        coroutineScope.launch {
+                            snackbarHostState.showSnackbar("Favorit '${fav.name}' telah dihapus")
+                        }
                     }
                 )
             }

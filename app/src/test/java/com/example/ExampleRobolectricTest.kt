@@ -34,4 +34,18 @@ class ExampleRobolectricTest {
     assertTrue(abs(testLat - resLat) < 0.0001)
     assertTrue(abs(testLon - resLon) < 0.0001)
   }
+
+  @Test
+  fun `verify favorite entity and name retrieval`() {
+    val fav = com.example.data.model.LocationFavoriteEntity(
+        id = 1L,
+        name = "Gudang",
+        latitude = -7.253427,
+        longitude = 112.707224,
+        description = "Gudang Surabaya"
+    )
+    assertEquals("Gudang", fav.name)
+    assertEquals(-7.253427, fav.latitude, 0.000001)
+    assertEquals(112.707224, fav.longitude, 0.000001)
+  }
 }

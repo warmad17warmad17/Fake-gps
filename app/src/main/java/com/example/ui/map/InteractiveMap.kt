@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Layers
@@ -55,6 +56,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +87,8 @@ fun InteractiveMap(
     onStopMock: () -> Unit,
     onDeleteHistory: (Long) -> Unit,
     onAddHistoryToFavorite: (LocationHistoryEntity) -> Unit,
+    onEditFavorite: (LocationFavoriteEntity) -> Unit = {},
+    onDeleteFavorite: (LocationFavoriteEntity) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -99,9 +103,19 @@ fun InteractiveMap(
     // Selected history item for showing Delete & Add to Favorite action popup
     var selectedHistoryItem by remember { mutableStateOf<LocationHistoryEntity?>(null) }
 
+    // Selected favorite item for showing name callout and Delete & Edit actions
+    var selectedFavoriteItem by remember { mutableStateOf<LocationFavoriteEntity?>(null) }
+
     // Blue dot drag state
     var isDraggingDot by remember { mutableStateOf(false) }
     var dragOffsetPx by remember { mutableStateOf(Offset.Zero) }
+
+    // Synchronize selected favorite if database changes (e.g. edited name or deleted)
+    LaunchedEffect(favoritesList) {
+        if (selectedFavoriteItem != null) {
+            selectedFavoriteItem = favoritesList.find { it.id == selectedFavoriteItem!!.id }
+        }
+    }
 
     // Listen to tiles updates
     LaunchedEffect(Unit) {
@@ -170,15 +184,35 @@ fun InteractiveMap(
                         centerLng = ((newLon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
                     }
                 }
-                .pointerInput(Unit) {
+                .pointerInput(centerLat, centerLng, zoomLevel, favoritesList, showFavorites) {
                     detectTapGestures(
                         onTap = { tapOffset ->
-                            selectedHistoryItem = null // Close popup on tap elsewhere
                             val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
-                            val tapWorldX = currWorldX + (tapOffset.x - centerX)
-                            val tapWorldY = currWorldY + (tapOffset.y - centerY)
-                            val (tapLat, tapLon) = MapProjection.worldPixelToLatLon(tapWorldX, tapWorldY, zoomLevel)
-                            onLocationSelected(tapLat, tapLon, true)
+
+                            // Check if tapped directly on/near any favorite marker (40dp radius)
+                            val tappedFav = if (showFavorites) {
+                                favoritesList.find { fav ->
+                                    val (fwX, fwY) = MapProjection.latLonToWorldPixel(fav.latitude, fav.longitude, zoomLevel)
+                                    val fx = centerX + (fwX - currWorldX).toFloat()
+                                    val fy = centerY + (fwY - currWorldY).toFloat() - 17.dp.toPx()
+                                    val dx = fx - tapOffset.x
+                                    val dy = fy - tapOffset.y
+                                    (dx * dx + dy * dy) <= (36.dp.toPx() * 36.dp.toPx())
+                                }
+                            } else null
+
+                            if (tappedFav != null) {
+                                selectedFavoriteItem = tappedFav
+                                selectedHistoryItem = null
+                                onLocationSelected(tappedFav.latitude, tappedFav.longitude, false)
+                            } else {
+                                selectedHistoryItem = null
+                                selectedFavoriteItem = null
+                                val tapWorldX = currWorldX + (tapOffset.x - centerX)
+                                val tapWorldY = currWorldY + (tapOffset.y - centerY)
+                                val (tapLat, tapLon) = MapProjection.worldPixelToLatLon(tapWorldX, tapWorldY, zoomLevel)
+                                onLocationSelected(tapLat, tapLon, true)
+                            }
                         },
                         onDoubleTap = {
                             zoomLevel = (zoomLevel + 1.0).coerceAtMost(19.0)
@@ -381,12 +415,130 @@ fun InteractiveMap(
                         modifier = Modifier
                             .offset { IntOffset((sx - 15.dp.toPx()).roundToInt(), (sy - 34.dp.toPx()).roundToInt()) }
                             .clickable {
+                                selectedFavoriteItem = fav
+                                selectedHistoryItem = null
                                 onLocationSelected(fav.latitude, fav.longitude, false)
                             }
+                            .testTag("favorite_pin_${fav.id}")
                     ) {
                         PinMarker(
                             color = FakeGpsFavoriteRed,
                             size = 30.dp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Callout displaying favorite name above clicked Favorite pin (Speech bubble with downward pointer)
+        if (selectedFavoriteItem != null && showFavorites) {
+            val fav = selectedFavoriteItem!!
+            val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomLevel)
+            val (fwX, fwY) = MapProjection.latLonToWorldPixel(fav.latitude, fav.longitude, zoomLevel)
+            val fx = centerX + (fwX - currWorldX).toFloat()
+            val fy = centerY + (fwY - currWorldY).toFloat()
+
+            if (fx >= -100 && fx <= widthPx + 100 && fy >= -120 && fy <= heightPx + 60) {
+                Box(
+                    modifier = Modifier
+                        .offset {
+                            IntOffset(fx.roundToInt(), (fy - 34.dp.toPx()).roundToInt())
+                        }
+                        .layout { measurable, constraints ->
+                            val placeable = measurable.measure(constraints)
+                            layout(placeable.width, placeable.height) {
+                                placeable.placeRelative(-placeable.width / 2, -placeable.height)
+                            }
+                        }
+                        .testTag("favorite_callout_${fav.id}")
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.clickable {
+                            onEditFavorite(fav)
+                        }
+                    ) {
+                        // White speech bubble container with the favorite's name
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color.White,
+                            shadowElevation = 4.dp
+                        ) {
+                            Text(
+                                text = fav.name,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color(0xFF1E1E1E),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            )
+                        }
+                        // Downward-pointing beak/pointer aiming directly at the top of the red pin
+                        Canvas(modifier = Modifier.size(width = 12.dp, height = 7.dp)) {
+                            val path = Path().apply {
+                                moveTo(0f, 0f)
+                                lineTo(size.width, 0f)
+                                lineTo(size.width / 2f, size.height)
+                                close()
+                            }
+                            drawPath(path = path, color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Floating Action Buttons for Selected Favorite (Delete & Edit, exactly matching user screenshot)
+        if (selectedFavoriteItem != null && showFavorites) {
+            val fav = selectedFavoriteItem!!
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
+                    .testTag("selected_favorite_actions_row"),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Delete favorite button (trash can icon)
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xCCE0E0E0),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clickable {
+                            onDeleteFavorite(fav)
+                            selectedFavoriteItem = null
+                        }
+                        .testTag("favorite_delete_action_button")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Hapus Favorit",
+                            tint = Color(0xFF424242),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                // Edit favorite button (green pencil icon)
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color(0xCCE0E0E0),
+                    shadowElevation = 2.dp,
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clickable {
+                            onEditFavorite(fav)
+                        }
+                        .testTag("favorite_edit_action_button")
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Favorit",
+                            tint = Color(0xFF00897B),
+                            modifier = Modifier.size(24.dp)
                         )
                     }
                 }
@@ -427,6 +579,7 @@ fun InteractiveMap(
                             isDraggingDot = true
                             dragOffsetPx = Offset.Zero
                             selectedHistoryItem = null
+                            selectedFavoriteItem = null
                         },
                         onDrag = { change, dragAmount ->
                             change.consume()

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -52,13 +53,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isMocking: StateFlow<Boolean> = MockLocationService.isMockingRunning
     val mockError: StateFlow<String?> = MockLocationService.mockError
 
-    // Remove any existing "Gudang" favorite so it never appears
     init {
         viewModelScope.launch {
-            favoritesList.collect { list ->
-                list.filter { it.name.equals("Gudang", ignoreCase = true) }.forEach {
-                    repository.deleteFavorite(it.id)
-                }
+            val existingFavs = repository.allFavorites.first()
+            if (existingFavs.isEmpty()) {
+                repository.addFavorite(
+                    name = "Gudang",
+                    latitude = -7.253427,
+                    longitude = 112.707224,
+                    description = "Gudang Surabaya"
+                )
+            }
+            val existingHist = repository.allHistory.first()
+            if (existingHist.isEmpty()) {
+                repository.addHistory(-7.255100, 112.698000, "Jl. Tj. Sari")
+                repository.addHistory(-7.247500, 112.716000, "Jl. Dupak Rukun")
             }
         }
     }
