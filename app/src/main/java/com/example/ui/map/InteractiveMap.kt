@@ -77,6 +77,10 @@ import com.example.ui.theme.FakeGpsFavoriteRed
 import com.example.ui.theme.FakeGpsHistoryBlue
 import com.example.ui.theme.FakeGpsPrimary
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.zIndex
+import com.example.ui.components.GoogleMapsSearchBar
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -96,16 +100,27 @@ fun InteractiveMap(
     onAddHistoryToFavorite: (LocationHistoryEntity) -> Unit,
     onEditFavorite: (LocationFavoriteEntity) -> Unit = {},
     onDeleteFavorite: (LocationFavoriteEntity) -> Unit = {},
+    onMenuClick: () -> Unit = {},
+    onSearchCoordinateClick: () -> Unit = {},
+    onShowFavorites: () -> Unit = {},
+    onShowHistory: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val tileManager = remember { TileManager(coroutineScope) }
+    val tileManager = remember { TileManager(coroutineScope, context.applicationContext) }
 
     // Map Camera state (Surabaya coordinates matching screenshot)
     var centerLat by remember { mutableDoubleStateOf(selectedLat) }
     var centerLng by remember { mutableDoubleStateOf(selectedLng) }
-    var zoomLevel by remember { mutableDoubleStateOf(15.0) }
+    var zoomLevel by remember { mutableDoubleStateOf(16.5) }
     var tileRefreshTrigger by remember { mutableIntStateOf(0) }
+
+    // Synchronize camera when selected coordinates change externally (e.g. from search, dialog, or favorite)
+    LaunchedEffect(selectedLat, selectedLng) {
+        centerLat = selectedLat
+        centerLng = selectedLng
+    }
 
     // Selected history item for showing Delete & Add to Favorite action popup
     var selectedHistoryItem by remember { mutableStateOf<LocationHistoryEntity?>(null) }
@@ -313,40 +328,24 @@ fun InteractiveMap(
                 gy += gridStep
             }
 
-            // Draw Google Maps Slippy Tiles with graceful fallback for zoom 21-22
+            // Draw Google Maps Slippy Tiles with zero-delay hierarchical fallback
             for (tx in minTileX..maxTileX) {
                 for (ty in minTileY..maxTileY) {
                     if (ty in 0 until maxTilesAcross) {
                         val normTx = ((tx % maxTilesAcross) + maxTilesAcross) % maxTilesAcross
-                        val tileBitmap = tileManager.getCachedTile(zoomInt, normTx, ty)
+                        val tileData = tileManager.getTileWithFallback(zoomInt, normTx, ty)
 
                         val tileScreenX = (tx * tileSize - minWorldX).toFloat()
                         val tileScreenY = (ty * tileSize - minWorldY).toFloat()
 
-                        if (tileBitmap != null) {
+                        if (tileData != null) {
                             drawImage(
-                                image = tileBitmap,
-                                topLeft = Offset(tileScreenX, tileScreenY)
+                                image = tileData.bitmap,
+                                srcOffset = tileData.srcOffset,
+                                srcSize = tileData.srcSize,
+                                dstOffset = IntOffset(tileScreenX.roundToInt(), tileScreenY.roundToInt()),
+                                dstSize = IntSize(tileSize.roundToInt(), tileSize.roundToInt())
                             )
-                        } else if (zoomInt > 20) {
-                            // High-zoom oversampling fallback: crop and scale parent tile from zoom 20
-                            val pDiff = zoomInt - 20
-                            val pTx = normTx shr pDiff
-                            val pTy = ty shr pDiff
-                            val parentTile = tileManager.getCachedTile(20, pTx, pTy)
-                            if (parentTile != null) {
-                                val subSize = 256 shr pDiff
-                                val subMask = (1 shl pDiff) - 1
-                                val subX = (normTx and subMask) * subSize
-                                val subY = (ty and subMask) * subSize
-                                drawImage(
-                                    image = parentTile,
-                                    srcOffset = IntOffset(subX, subY),
-                                    srcSize = IntSize(subSize, subSize),
-                                    dstOffset = IntOffset(tileScreenX.roundToInt(), tileScreenY.roundToInt()),
-                                    dstSize = IntSize(tileSize.roundToInt(), tileSize.roundToInt())
-                                )
-                            }
                         }
                     }
                 }
@@ -577,7 +576,9 @@ fun InteractiveMap(
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 16.dp)
+                    .statusBarsPadding()
+                    .padding(top = 120.dp)
+                    .zIndex(5f)
                     .testTag("selected_favorite_actions_row"),
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -710,11 +711,44 @@ fun InteractiveMap(
                 .testTag("google_maps_blue_dot")
         )
 
-        // Top Right Controls (Recenter, Layer Switcher, Zoom In/Out)
+        // Top Floating Google Maps Search Bar with Address Geocoding & Filters
+        GoogleMapsSearchBar(
+            onMenuClick = onMenuClick,
+            onLocationSelected = { sLat, sLng, _ ->
+                centerLat = sLat
+                centerLng = sLng
+                zoomLevel = 16.5
+                onLocationSelected(sLat, sLng, true)
+            },
+            onSearchCoordinateClick = onSearchCoordinateClick,
+            onShowFavorites = onShowFavorites,
+            onShowHistory = onShowHistory,
+            onToggleLayer = {
+                val nextType = when (tileManager.currentTileType) {
+                    MapTileType.GOOGLE_ROADMAP -> MapTileType.GOOGLE_SATELLITE
+                    MapTileType.GOOGLE_SATELLITE -> MapTileType.GOOGLE_TERRAIN
+                    MapTileType.GOOGLE_TERRAIN -> MapTileType.GOOGLE_ROADMAP
+                }
+                tileManager.currentTileType = nextType
+            },
+            currentTileType = tileManager.currentTileType,
+            isMocking = isMocking,
+            onStartMock = onStartMock,
+            onStopMock = onStopMock,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 4.dp)
+                .zIndex(10f)
+        )
+
+        // Right-side Google Maps Controls (Recenter, Layer Switcher, Zoom In/Out)
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(top = 16.dp, end = 16.dp),
+                .statusBarsPadding()
+                .padding(top = 118.dp, end = 14.dp)
+                .zIndex(5f),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

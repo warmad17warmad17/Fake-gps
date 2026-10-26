@@ -198,42 +198,6 @@ fun MainScreen(viewModel: MainViewModel) {
         }
     ) {
         Scaffold(
-            topBar = {
-                TopAppBarFakeGps(
-                    isMocking = isMocking,
-                    onMenuClick = {
-                        coroutineScope.launch { drawerState.open() }
-                    },
-                    onStartMock = {
-                        viewModel.startMock(context)
-                    },
-                    onStopMock = {
-                        viewModel.stopMock(context)
-                        coroutineScope.launch {
-                            snackbarHostState.currentSnackbarData?.dismiss()
-                            snackbarHostState.showSnackbar(
-                                message = "Mock Location dihentikan",
-                                duration = SnackbarDuration.Short
-                            )
-                        }
-                    },
-                    onFilterClick = { showFilterDialog = true },
-                    onSearchCoordinateClick = { showCoordinateInputDialog = true },
-                    onOpenDeveloperOptions = { showDevGuideDialog = true },
-                    onShowHistory = { showHistorySheet = true },
-                    onShowFavorites = { showFavoritesSheet = true },
-                    onClearHistory = {
-                        viewModel.clearAllHistory()
-                        coroutineScope.launch {
-                            snackbarHostState.currentSnackbarData?.dismiss()
-                            snackbarHostState.showSnackbar(
-                                message = "Semua riwayat lokasi telah dihapus",
-                                duration = SnackbarDuration.Short
-                            )
-                        }
-                    }
-                )
-            },
             modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
             Box(
@@ -241,7 +205,7 @@ fun MainScreen(viewModel: MainViewModel) {
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
-                // Interactive Map Engine
+                // Edge-to-edge Google Maps Engine with Floating Search & Autocomplete
                 InteractiveMap(
                     selectedLat = selectedLat,
                     selectedLng = selectedLng,
@@ -292,15 +256,27 @@ fun MainScreen(viewModel: MainViewModel) {
                                 duration = SnackbarDuration.Short
                             )
                         }
+                    },
+                    onMenuClick = {
+                        coroutineScope.launch { drawerState.open() }
+                    },
+                    onSearchCoordinateClick = {
+                        showCoordinateInputDialog = true
+                    },
+                    onShowFavorites = {
+                        showFavoritesSheet = true
+                    },
+                    onShowHistory = {
+                        showHistorySheet = true
                     }
                 )
 
-                // Top-aligned notification banner that NEVER blocks the bottom controls (Start/Stop FAB or Coordinates)
+                // Top-aligned notification banner positioned below the search bar chips (never blocks bottom Start/Stop FAB)
                 SnackbarHost(
                     hostState = snackbarHostState,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .padding(top = 10.dp, start = 16.dp, end = 16.dp)
+                        .padding(top = 118.dp, start = 16.dp, end = 16.dp)
                         .zIndex(100f)
                 ) { data ->
                     Card(
