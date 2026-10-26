@@ -296,7 +296,7 @@ class MockLocationService : Service() {
         return NotificationCompat.Builder(this, FakeGpsApp.CHANNEL_ID)
             .setContentTitle("Fake GPS Aktif")
             .setContentText(contentText)
-            .setSmallIcon(R.drawable.fake_gps_icon_1792932593937)
+            .setSmallIcon(R.drawable.fake_gps_icon_3d)
             .setContentIntent(mainPendingIntent)
             .setOngoing(true)
             .addAction(android.R.drawable.ic_media_pause, "Berhenti", stopPendingIntent)

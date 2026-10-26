@@ -71,4 +71,60 @@ class ExampleRobolectricTest {
     // In Robolectric environment, default is true or false without crash
     assertTrue(isIgnored || !isIgnored)
   }
+
+  @Test
+  fun `verify backup json generation and parsing round trip`() {
+    val favorites = listOf(
+        com.example.data.model.LocationFavoriteEntity(
+            id = 1L,
+            name = "Kantor Pusat",
+            latitude = -6.2088,
+            longitude = 106.8456,
+            description = "Jakarta",
+            sortOrder = 0
+        ),
+        com.example.data.model.LocationFavoriteEntity(
+            id = 2L,
+            name = "Gudang Surabaya",
+            latitude = -7.2534,
+            longitude = 112.7072,
+            description = "Banyu Urip",
+            sortOrder = 1
+        )
+    )
+
+    val json = com.example.util.BackupRestoreHelper.createBackupJson(favorites)
+    assertTrue(json.contains("Kantor Pusat"))
+    assertTrue(json.contains("Gudang Surabaya"))
+    assertTrue(json.contains("\"count\": 2"))
+
+    val parsed = com.example.util.BackupRestoreHelper.parseBackupJson(json)
+    assertEquals(2, parsed.size)
+    assertEquals("Kantor Pusat", parsed[0].name)
+    assertEquals(-6.2088, parsed[0].latitude, 0.0001)
+    assertEquals("Gudang Surabaya", parsed[1].name)
+    assertEquals(112.7072, parsed[1].longitude, 0.0001)
+  }
+
+  @Test
+  fun `verify fallback parsing for raw json array`() {
+    val rawArrayJson = """
+      [
+        {"name": "Lokasi A", "latitude": -7.1, "longitude": 112.2},
+        {"name": "Lokasi B", "latitude": -7.3, "longitude": 112.4}
+      ]
+    """.trimIndent()
+
+    val parsed = com.example.util.BackupRestoreHelper.parseBackupJson(rawArrayJson)
+    assertEquals(2, parsed.size)
+    assertEquals("Lokasi A", parsed[0].name)
+    assertEquals("Lokasi B", parsed[1].name)
+  }
+
+  @Test
+  fun `verify default backup filename format`() {
+    val fileName = com.example.util.BackupRestoreHelper.generateDefaultBackupFileName()
+    assertTrue(fileName.startsWith("fake_gps_favorit_"))
+    assertTrue(fileName.endsWith(".json"))
+  }
 }

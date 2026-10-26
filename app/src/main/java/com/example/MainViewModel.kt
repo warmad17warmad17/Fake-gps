@@ -166,4 +166,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             repository.clearHistory()
         }
     }
+
+    fun restoreFavorites(
+        favorites: List<LocationFavoriteEntity>,
+        replaceExisting: Boolean,
+        onComplete: (Int) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val count = repository.restoreFavorites(favorites, replaceExisting)
+            FavoritesWidgetProvider.updateAllWidgets(getApplication())
+            onComplete(count)
+        }
+    }
 }

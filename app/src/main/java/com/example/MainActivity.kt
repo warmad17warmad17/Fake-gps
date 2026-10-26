@@ -67,6 +67,9 @@ import com.example.ui.components.FavoritesBottomSheet
 import com.example.ui.components.FilterDialog
 import com.example.ui.components.HistoryBottomSheet
 import com.example.ui.components.NavigationDrawerContent
+import com.example.ui.components.BackupDialog
+import com.example.ui.components.RestorePreviewDialog
+import com.example.util.BackupRestoreHelper
 import com.example.ui.components.TopAppBarFakeGps
 import com.example.ui.components.openDeveloperSettings
 import com.example.ui.map.InteractiveMap
@@ -134,10 +137,71 @@ fun MainScreen(viewModel: MainViewModel) {
     var showHistorySheet by remember { mutableStateOf(false) }
     var showFavoritesSheet by remember { mutableStateOf(false) }
 
+    // Backup & Restore state
+    var showBackupDialog by remember { mutableStateOf(false) }
+    var showRestorePreviewDialog by remember { mutableStateOf(false) }
+    var pendingRestoreList by remember { mutableStateOf<List<LocationFavoriteEntity>>(emptyList()) }
+
     val historySheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val favoritesSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Permission launcher for Location and Post Notifications
+    // Storage SAF Launcher for saving backup JSON to device internal/external storage
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            val json = BackupRestoreHelper.createBackupJson(favoritesList)
+            val success = BackupRestoreHelper.writeBackupToUri(context, uri, json)
+            showBackupDialog = false
+            coroutineScope.launch {
+                if (success) {
+                    snackbarHostState.showSnackbar("Berhasil mencadangkan ${favoritesList.size} lokasi favorit ke penyimpanan perangkat!")
+                } else {
+                    snackbarHostState.showSnackbar("Gagal menyimpan file cadangan ke penyimpanan.")
+                }
+            }
+        }
+    }
+
+    // Storage SAF Launcher for opening backup JSON from device internal/external storage
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            val jsonContent = BackupRestoreHelper.readBackupFromUri(context, uri)
+            if (!jsonContent.isNullOrBlank()) {
+                val parsed = BackupRestoreHelper.parseBackupJson(jsonContent)
+                if (parsed.isNotEmpty()) {
+                    pendingRestoreList = parsed
+                    showRestorePreviewDialog = true
+                } else {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("File cadangan tidak berisi lokasi favorit yang valid.")
+                    }
+                }
+            } else {
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Gagal membaca berkas cadangan dari penyimpanan.")
+                }
+            }
+        }
+    }
+
+    val triggerBackup: () -> Unit = {
+        if (favoritesList.isEmpty()) {
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar("Belum ada lokasi favorit untuk dicadangkan.")
+            }
+        } else {
+            showBackupDialog = true
+        }
+    }
+
+    val triggerRestore: () -> Unit = {
+        openDocumentLauncher.launch(arrayOf("application/json", "text/*", "*/*"))
+    }
+
+    // Permission launcher for Location, Storage, and Post Notifications
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -157,6 +221,9 @@ fun MainScreen(viewModel: MainViewModel) {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+            permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
         }
         val needed = permissionsToRequest.filter {
             ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
@@ -191,6 +258,8 @@ fun MainScreen(viewModel: MainViewModel) {
                     targetFavLng = selectedLng
                     showAddFavoriteDialog = true
                 },
+                onBackupFavorites = triggerBackup,
+                onRestoreFavorites = triggerRestore,
                 onSearchCoordinate = { showCoordinateInputDialog = true },
                 onShowFilter = { showFilterDialog = true },
                 onShowDevGuide = { showDevGuideDialog = true },
@@ -461,6 +530,49 @@ fun MainScreen(viewModel: MainViewModel) {
                 viewModel.reorderFavorites(newOrderList)
             },
             onDismiss = { showFavoritesSheet = false }
+        )
+    }
+
+    // Backup Dialog
+    if (showBackupDialog) {
+        BackupDialog(
+            favoritesCount = favoritesList.size,
+            onSaveToStorage = {
+                createDocumentLauncher.launch(BackupRestoreHelper.generateDefaultBackupFileName())
+            },
+            onShareBackup = {
+                val shareIntent = BackupRestoreHelper.createShareIntent(context, favoritesList)
+                if (shareIntent != null) {
+                    context.startActivity(shareIntent)
+                    showBackupDialog = false
+                } else {
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Gagal menyiapkan file cadangan untuk dibagikan.")
+                    }
+                }
+            },
+            onDismiss = { showBackupDialog = false }
+        )
+    }
+
+    // Restore Preview & Confirmation Dialog
+    if (showRestorePreviewDialog && pendingRestoreList.isNotEmpty()) {
+        RestorePreviewDialog(
+            favoritesToRestore = pendingRestoreList,
+            onConfirmRestore = { replaceExisting ->
+                val listToRestore = pendingRestoreList
+                viewModel.restoreFavorites(listToRestore, replaceExisting) { count ->
+                    coroutineScope.launch {
+                        snackbarHostState.showSnackbar("Berhasil memulihkan $count lokasi favorit!")
+                    }
+                }
+                showRestorePreviewDialog = false
+                pendingRestoreList = emptyList()
+            },
+            onDismiss = {
+                showRestorePreviewDialog = false
+                pendingRestoreList = emptyList()
+            }
         )
     }
 }

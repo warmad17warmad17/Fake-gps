@@ -59,4 +59,24 @@ class LocationRepository(private val locationDao: LocationDao) {
     suspend fun getFavoriteById(id: Long): LocationFavoriteEntity? {
         return locationDao.getFavoriteById(id)
     }
+
+    suspend fun restoreFavorites(favorites: List<LocationFavoriteEntity>, replaceExisting: Boolean): Int {
+        if (replaceExisting) {
+            locationDao.clearAllFavorites()
+        }
+        val startSortOrder = if (replaceExisting) 0 else ((locationDao.getMaxSortOrder() ?: -1) + 1)
+        val entitiesToInsert = favorites.mapIndexed { index, item ->
+            LocationFavoriteEntity(
+                id = 0,
+                name = item.name.ifBlank { "Lokasi Favorit" },
+                latitude = item.latitude,
+                longitude = item.longitude,
+                description = item.description,
+                timestamp = if (item.timestamp > 0) item.timestamp else System.currentTimeMillis(),
+                sortOrder = startSortOrder + index
+            )
+        }
+        locationDao.insertFavorites(entitiesToInsert)
+        return entitiesToInsert.size
+    }
 }

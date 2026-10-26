@@ -26,8 +26,6 @@ import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Widgets
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -49,7 +47,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -61,7 +58,6 @@ import androidx.compose.ui.zIndex
 import com.example.data.model.LocationFavoriteEntity
 import com.example.ui.theme.FakeGpsFavoriteRed
 import com.example.ui.theme.FakeGpsPrimary
-import com.example.widget.WidgetHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,66 +109,7 @@ fun FavoritesBottomSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            val context = LocalContext.current
-
-            // Quick Pin Widget to Home Screen Card
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = FakeGpsPrimary.copy(alpha = 0.08f)),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 2.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(FakeGpsPrimary.copy(alpha = 0.15f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Widgets,
-                            contentDescription = null,
-                            tint = FakeGpsPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Widget Layar Utama",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            color = FakeGpsPrimary
-                        )
-                        Text(
-                            text = "Tampilkan dan pilih lokasi favorit langsung di Home Screen",
-                            fontSize = 11.sp,
-                            lineHeight = 14.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Button(
-                        onClick = {
-                            WidgetHelper.pinWidgetToHomeScreen(context)
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.testTag("pin_widget_button")
-                    ) {
-                        Text("Pasang", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             if (localList.isEmpty()) {
                 Box(

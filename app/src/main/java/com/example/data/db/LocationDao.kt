@@ -52,4 +52,10 @@ interface LocationDao {
 
     @Query("SELECT * FROM location_favorites WHERE id = :id LIMIT 1")
     suspend fun getFavoriteById(id: Long): LocationFavoriteEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFavorites(favorites: List<LocationFavoriteEntity>): List<Long>
+
+    @Query("DELETE FROM location_favorites")
+    suspend fun clearAllFavorites()
 }

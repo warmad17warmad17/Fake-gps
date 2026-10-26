@@ -54,6 +54,9 @@ import com.example.util.BatteryOptimizationHelper
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Restore
+
 @Composable
 fun NavigationDrawerContent(
     isMocking: Boolean,
@@ -62,6 +65,8 @@ fun NavigationDrawerContent(
     onShowHistory: () -> Unit,
     onShowFavorites: () -> Unit,
     onAddCurrentToFavorite: () -> Unit,
+    onBackupFavorites: () -> Unit = {},
+    onRestoreFavorites: () -> Unit = {},
     onSearchCoordinate: () -> Unit,
     onShowFilter: () -> Unit,
     onShowDevGuide: () -> Unit,
@@ -200,6 +205,32 @@ fun NavigationDrawerContent(
             modifier = Modifier
                 .padding(NavigationDrawerItemDefaults.ItemPadding)
                 .testTag("drawer_pin_widget_item")
+        )
+
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Default.Backup, contentDescription = null, tint = FakeGpsPrimary) },
+            label = { Text("Cadangkan Favorit (Backup ke HP)") },
+            selected = false,
+            onClick = {
+                onCloseDrawer()
+                onBackupFavorites()
+            },
+            modifier = Modifier
+                .padding(NavigationDrawerItemDefaults.ItemPadding)
+                .testTag("drawer_backup_favorites_item")
+        )
+
+        NavigationDrawerItem(
+            icon = { Icon(Icons.Default.Restore, contentDescription = null, tint = Color(0xFF2E7D32)) },
+            label = { Text("Pulihkan Favorit (Restore dari HP)") },
+            selected = false,
+            onClick = {
+                onCloseDrawer()
+                onRestoreFavorites()
+            },
+            modifier = Modifier
+                .padding(NavigationDrawerItemDefaults.ItemPadding)
+                .testTag("drawer_restore_favorites_item")
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
