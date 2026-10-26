@@ -159,12 +159,12 @@ fun InteractiveMap(
         val centerY = heightPx / 2f
 
         val zoomInt = zoomLevel.roundToInt().coerceIn(3, 22)
-        val effectiveZoom = zoomInt.toDouble()
+        val effectiveZoom = zoomLevel.coerceIn(3.0, 22.0)
 
-        // Fetch visible Google Maps tiles outside Draw phase
-        LaunchedEffect(centerLat, centerLng, effectiveZoom, widthPx, heightPx, tileManager.currentTileType) {
+        // Fetch visible Google Maps tiles outside Draw phase (keyed on integer zoom)
+        LaunchedEffect(centerLat, centerLng, zoomInt, widthPx, heightPx, tileManager.currentTileType) {
             delay(40)
-            val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
+            val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomInt.toDouble())
             val minWorldX = centerWorldX - centerX
             val maxWorldX = centerWorldX + centerX
             val minWorldY = centerWorldY - centerY
@@ -198,29 +198,32 @@ fun InteractiveMap(
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(Unit) {
-                    detectTransformGestures { _, pan, zoom, _ ->
-                        // 1. Gentle zoom with deadzone to prevent accidental zooming during panning
-                        if (kotlin.math.abs(zoom - 1f) > 0.02f) {
-                            val zoomDelta = ((zoom - 1f) * 0.55).coerceIn(-0.25, 0.25)
-                            zoomLevel = (zoomLevel + zoomDelta).coerceIn(3.0, 22.0)
-                        }
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        if (centroid.x.isNaN() || centroid.y.isNaN()) return@detectTransformGestures
 
-                        // 2. Adaptive pan damping based on zoom level:
-                        // At zoom 3: ~0.50f (responsive)
-                        // At zoom 18-22 (full zoom): 0.12f - 0.20f (ultra-fine micro-precision)
-                        val zoomRatio = ((zoomLevel - 3.0) / 19.0).coerceIn(0.0, 1.0)
-                        val panDamping = (0.50 - (zoomRatio * 0.38)).toFloat()
-                        val maxStep = (20f - (zoomRatio * 16f).toFloat()).coerceAtLeast(3f)
+                        val oldZoomLevel = zoomLevel
+                        val zoomDelta = if (zoom != 1f) {
+                            // Instant, ultra-smooth logarithmic pinch zoom response with zero artificial deadzone
+                            (kotlin.math.ln(zoom.toDouble()) / kotlin.math.ln(2.0)) * 1.45
+                        } else 0.0
 
-                        val smoothPanX = (pan.x * panDamping).coerceIn(-maxStep, maxStep)
-                        val smoothPanY = (pan.y * panDamping).coerceIn(-maxStep, maxStep)
+                        val newZoomLevel = (oldZoomLevel + zoomDelta).coerceIn(3.0, 22.0)
 
-                        val (currWorldX, currWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, effectiveZoom)
-                        val newWorldX = currWorldX - smoothPanX
-                        val newWorldY = currWorldY - smoothPanY
-                        val (newLat, newLon) = MapProjection.worldPixelToLatLon(newWorldX, newWorldY, effectiveZoom)
-                        centerLat = newLat.coerceIn(-85.0, 85.0)
-                        centerLng = ((newLon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+                        // Anchor the zoom around the touch focal point (centroid) between fingers
+                        val (cwX, cwY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, oldZoomLevel)
+                        val centroidWorldX = cwX + (centroid.x - centerX)
+                        val centroidWorldY = cwY + (centroid.y - centerY)
+                        val (centroidLat, centroidLon) = MapProjection.worldPixelToLatLon(centroidWorldX, centroidWorldY, oldZoomLevel)
+
+                        val (newCentroidWorldX, newCentroidWorldY) = MapProjection.latLonToWorldPixel(centroidLat, centroidLon, newZoomLevel)
+                        // 1:1 Direct pan tracking without lag, dampening, or clamp limits
+                        val newCenterWorldX = newCentroidWorldX - (centroid.x - centerX) - pan.x
+                        val newCenterWorldY = newCentroidWorldY - (centroid.y - centerY) - pan.y
+                        val (newCenterLat, newCenterLon) = MapProjection.worldPixelToLatLon(newCenterWorldX, newCenterWorldY, newZoomLevel)
+
+                        zoomLevel = newZoomLevel
+                        centerLat = newCenterLat.coerceIn(-85.0, 85.0)
+                        centerLng = ((newCenterLon + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
                     }
                 }
                 .pointerInput(centerLat, centerLng, effectiveZoom, favoritesList, historyList, showFavorites, showHistory) {
@@ -288,21 +291,25 @@ fun InteractiveMap(
             val bgColor = if (tileManager.currentTileType == MapTileType.GOOGLE_SATELLITE) Color(0xFF1E262C) else Color(0xFFF2F4F7)
             drawRect(bgColor)
 
-            val zoomInt = zoomLevel.roundToInt().coerceIn(3, 22)
-            val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomInt.toDouble())
+            val currentZoom = zoomLevel.coerceIn(3.0, 22.0)
+            val baseZoom = floor(currentZoom).toInt().coerceIn(3, 21)
+            val zoomFraction = currentZoom - baseZoom
+            val scale = Math.pow(2.0, zoomFraction)
+            val scaledTileSize = MapProjection.TILE_SIZE * scale
+
+            val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, currentZoom)
 
             val minWorldX = centerWorldX - centerX
             val maxWorldX = centerWorldX + centerX
             val minWorldY = centerWorldY - centerY
             val maxWorldY = centerWorldY + centerY
 
-            val tileSize = MapProjection.TILE_SIZE
-            val minTileX = floor(minWorldX / tileSize).toInt()
-            val maxTileX = floor(maxWorldX / tileSize).toInt()
-            val minTileY = floor(minWorldY / tileSize).toInt()
-            val maxTileY = floor(maxWorldY / tileSize).toInt()
+            val minTileX = floor(minWorldX / scaledTileSize).toInt()
+            val maxTileX = floor(maxWorldX / scaledTileSize).toInt()
+            val minTileY = floor(minWorldY / scaledTileSize).toInt()
+            val maxTileY = floor(maxWorldY / scaledTileSize).toInt()
 
-            val maxTilesAcross = 1 shl zoomInt
+            val maxTilesAcross = 1 shl baseZoom
 
             // Draw subtle street grid guides
             val gridStep = 64f
@@ -328,23 +335,25 @@ fun InteractiveMap(
                 gy += gridStep
             }
 
-            // Draw Google Maps Slippy Tiles with zero-delay hierarchical fallback
+            // Draw Google Maps Slippy Tiles with smooth scaling and hierarchical fallback
             for (tx in minTileX..maxTileX) {
                 for (ty in minTileY..maxTileY) {
                     if (ty in 0 until maxTilesAcross) {
                         val normTx = ((tx % maxTilesAcross) + maxTilesAcross) % maxTilesAcross
-                        val tileData = tileManager.getTileWithFallback(zoomInt, normTx, ty)
+                        val tileData = tileManager.getTileWithFallback(baseZoom, normTx, ty)
 
-                        val tileScreenX = (tx * tileSize - minWorldX).toFloat()
-                        val tileScreenY = (ty * tileSize - minWorldY).toFloat()
+                        val tileScreenX = (tx * scaledTileSize - minWorldX).toFloat()
+                        val tileScreenY = (ty * scaledTileSize - minWorldY).toFloat()
 
                         if (tileData != null) {
+                            val drawW = (scaledTileSize + 1.0).roundToInt()
+                            val drawH = (scaledTileSize + 1.0).roundToInt()
                             drawImage(
                                 image = tileData.bitmap,
                                 srcOffset = tileData.srcOffset,
                                 srcSize = tileData.srcSize,
                                 dstOffset = IntOffset(tileScreenX.roundToInt(), tileScreenY.roundToInt()),
-                                dstSize = IntSize(tileSize.roundToInt(), tileSize.roundToInt())
+                                dstSize = IntSize(drawW, drawH)
                             )
                         }
                     }
