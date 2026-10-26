@@ -26,7 +26,7 @@ object BackupRestoreHelper {
      */
     fun createBackupJson(favorites: List<LocationFavoriteEntity>): String {
         val root = JSONObject()
-        root.put("app", "Fake GPS")
+        root.put("app", "My Maps")
         root.put("version", 1)
         root.put("timestamp", System.currentTimeMillis())
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
@@ -150,8 +150,8 @@ object BackupRestoreHelper {
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/json"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "Backup Lokasi Favorit Fake GPS")
-                putExtra(Intent.EXTRA_TEXT, "File cadangan lokasi favorit Fake GPS (${favorites.size} lokasi). Simpan file ini dan gunakan menu Restore di Fake GPS pada perangkat baru.")
+                putExtra(Intent.EXTRA_SUBJECT, "Backup Lokasi Favorit My Maps")
+                putExtra(Intent.EXTRA_TEXT, "File cadangan lokasi favorit My Maps (${favorites.size} lokasi). Simpan file ini dan gunakan menu Restore di My Maps pada perangkat baru.")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             Intent.createChooser(intent, "Kirim Cadangan Lokasi Favorit")

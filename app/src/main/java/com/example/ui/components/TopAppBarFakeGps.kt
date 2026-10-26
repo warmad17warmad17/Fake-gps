@@ -49,7 +49,7 @@ fun TopAppBarFakeGps(
     TopAppBar(
         title = {
             Text(
-                text = "Fake GPS",
+                text = "My Maps",
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp

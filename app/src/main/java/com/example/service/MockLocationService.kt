@@ -294,7 +294,7 @@ class MockLocationService : Service() {
         }
 
         return NotificationCompat.Builder(this, FakeGpsApp.CHANNEL_ID)
-            .setContentTitle("Fake GPS Aktif")
+            .setContentTitle("My Maps Aktif")
             .setContentText(contentText)
             .setSmallIcon(R.drawable.fake_gps_icon_3d)
             .setContentIntent(mainPendingIntent)

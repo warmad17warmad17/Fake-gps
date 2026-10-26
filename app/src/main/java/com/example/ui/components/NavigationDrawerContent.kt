@@ -112,7 +112,7 @@ fun NavigationDrawerContent(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Fake GPS",
+                            text = "My Maps",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -322,7 +322,7 @@ fun NavigationDrawerContent(
         Spacer(modifier = Modifier.weight(1f))
 
         Text(
-            text = "Fake GPS v1.0 • Kotlin & Jetpack Compose",
+            text = "My Maps v1.0 • Kotlin & Jetpack Compose",
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             modifier = Modifier.padding(20.dp)
