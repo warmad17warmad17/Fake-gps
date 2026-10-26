@@ -5,11 +5,9 @@ import android.content.Intent
 import android.os.Binder
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
-import com.example.FakeGpsApp
 import com.example.R
+import com.example.data.db.AppDatabase
 import com.example.data.model.LocationFavoriteEntity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
 
 class FavoritesWidgetService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory {
@@ -22,18 +20,12 @@ class FavoritesRemoteViewsFactory(private val context: Context) : RemoteViewsSer
     private var favoritesList: List<LocationFavoriteEntity> = emptyList()
 
     override fun onCreate() {
-        // onCreate is invoked on the main thread when binding to the service.
-        // Do not query database here to avoid blocking UI thread or violating threading rules.
-        // onDataSetChanged is automatically invoked on an IPC worker thread immediately following onCreate.
     }
 
     override fun onDataSetChanged() {
         val identityToken = Binder.clearCallingIdentity()
         try {
-            val app = context.applicationContext as? FakeGpsApp
-            favoritesList = runBlocking(Dispatchers.IO) {
-                app?.database?.locationDao()?.getAllFavoritesList() ?: emptyList()
-            }
+            favoritesList = AppDatabase.getDatabase(context).locationDao().getAllFavoritesList()
         } catch (e: Exception) {
             e.printStackTrace()
             favoritesList = emptyList()

@@ -29,18 +29,27 @@ class LocationRepository(private val locationDao: LocationDao) {
     }
 
     suspend fun addFavorite(name: String, latitude: Double, longitude: Double, description: String = ""): Long {
+        val nextSortOrder = (locationDao.getMaxSortOrder() ?: -1) + 1
         return locationDao.insertFavorite(
             LocationFavoriteEntity(
                 name = name.ifBlank { "Lokasi Favorit" },
                 latitude = latitude,
                 longitude = longitude,
-                description = description
+                description = description,
+                sortOrder = nextSortOrder
             )
         )
     }
 
     suspend fun updateFavorite(favorite: LocationFavoriteEntity) {
         locationDao.updateFavorite(favorite)
+    }
+
+    suspend fun updateFavoritesOrder(reorderedList: List<LocationFavoriteEntity>) {
+        val updated = reorderedList.mapIndexed { index, fav ->
+            fav.copy(sortOrder = index)
+        }
+        locationDao.updateFavorites(updated)
     }
 
     suspend fun deleteFavorite(id: Long) {

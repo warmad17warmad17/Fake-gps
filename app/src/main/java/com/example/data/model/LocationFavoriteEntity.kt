@@ -11,5 +11,6 @@ data class LocationFavoriteEntity(
     val latitude: Double,
     val longitude: Double,
     val description: String = "",
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val sortOrder: Int = 0
 )

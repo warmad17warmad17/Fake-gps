@@ -148,6 +148,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun reorderFavorites(newOrderList: List<LocationFavoriteEntity>) {
+        viewModelScope.launch {
+            repository.updateFavoritesOrder(newOrderList)
+            FavoritesWidgetProvider.updateAllWidgets(getApplication())
+        }
+    }
+
     fun deleteHistory(id: Long) {
         viewModelScope.launch {
             repository.deleteHistory(id)

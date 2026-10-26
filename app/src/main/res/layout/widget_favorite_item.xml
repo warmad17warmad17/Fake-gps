@@ -2,14 +2,14 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/item_row_root"
     android:layout_width="match_parent"
-    android:layout_height="56dp"
+    android:layout_height="44dp"
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="#FFFFFF"
-    android:paddingStart="16dp"
-    android:paddingEnd="12dp">
+    android:paddingStart="14dp"
+    android:paddingEnd="8dp">
 
-    <!-- Location Name Only -->
+    <!-- Location Name Only (No Coordinates) -->
     <TextView
         android:id="@+id/item_name"
         android:layout_width="0dp"
@@ -17,18 +17,17 @@
         android:layout_weight="1"
         android:text="Lokasi Favorit"
         android:textColor="#212121"
-        android:textSize="15sp"
+        android:textSize="14sp"
         android:textStyle="bold"
-        android:singleLine="true"
+        android:maxLines="1"
         android:ellipsize="end" />
 
     <!-- Start / Stop Button (GPS Target or Red Stop) -->
     <ImageView
         android:id="@+id/item_action_button"
-        android:layout_width="44dp"
-        android:layout_height="44dp"
-        android:padding="8dp"
-        android:src="@drawable/ic_widget_target_blue"
+        android:layout_width="38dp"
+        android:layout_height="38dp"
+        android:padding="6dp"
         android:contentDescription="Mulai / Berhenti Mock Lokasi"
         android:background="@android:color/transparent" />
 

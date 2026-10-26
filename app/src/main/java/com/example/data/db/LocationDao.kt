@@ -26,10 +26,10 @@ interface LocationDao {
     suspend fun clearAllHistory()
 
     // Favorites Queries
-    @Query("SELECT * FROM location_favorites ORDER BY timestamp DESC")
+    @Query("SELECT * FROM location_favorites ORDER BY sortOrder ASC, id ASC")
     fun getAllFavorites(): Flow<List<LocationFavoriteEntity>>
 
-    @Query("SELECT * FROM location_favorites ORDER BY timestamp DESC")
+    @Query("SELECT * FROM location_favorites ORDER BY sortOrder ASC, id ASC")
     fun getAllFavoritesList(): List<LocationFavoriteEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -37,6 +37,15 @@ interface LocationDao {
 
     @Update
     suspend fun updateFavorite(favorite: LocationFavoriteEntity)
+
+    @Update
+    suspend fun updateFavorites(favorites: List<LocationFavoriteEntity>)
+
+    @Query("UPDATE location_favorites SET sortOrder = :sortOrder WHERE id = :id")
+    suspend fun updateFavoriteOrder(id: Long, sortOrder: Int)
+
+    @Query("SELECT MAX(sortOrder) FROM location_favorites")
+    suspend fun getMaxSortOrder(): Int?
 
     @Query("DELETE FROM location_favorites WHERE id = :id")
     suspend fun deleteFavorite(id: Long)

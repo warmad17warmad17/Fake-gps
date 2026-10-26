@@ -10,21 +10,38 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -148,7 +165,11 @@ fun MainScreen(viewModel: MainViewModel) {
 
     LaunchedEffect(isMocking) {
         if (isMocking) {
-            snackbarHostState.showSnackbar("Mock Location aktif pada %.6f, %.6f".format(selectedLat, selectedLng))
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = "Mock Location aktif pada %.6f, %.6f".format(selectedLat, selectedLng),
+                duration = SnackbarDuration.Short
+            )
         }
     }
 
@@ -189,7 +210,11 @@ fun MainScreen(viewModel: MainViewModel) {
                     onStopMock = {
                         viewModel.stopMock(context)
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Mock Location dihentikan")
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar(
+                                message = "Mock Location dihentikan",
+                                duration = SnackbarDuration.Short
+                            )
                         }
                     },
                     onFilterClick = { showFilterDialog = true },
@@ -200,12 +225,15 @@ fun MainScreen(viewModel: MainViewModel) {
                     onClearHistory = {
                         viewModel.clearAllHistory()
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Semua riwayat lokasi telah dihapus")
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar(
+                                message = "Semua riwayat lokasi telah dihapus",
+                                duration = SnackbarDuration.Short
+                            )
                         }
                     }
                 )
             },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
             modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
             Box(
@@ -231,13 +259,20 @@ fun MainScreen(viewModel: MainViewModel) {
                     onStopMock = {
                         viewModel.stopMock(context)
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Mock Location dihentikan")
+                            snackbarHostState.currentSnackbarData?.dismiss()
+                            snackbarHostState.showSnackbar(
+                                message = "Mock Location dihentikan",
+                                duration = SnackbarDuration.Short
+                            )
                         }
                     },
                     onDeleteHistory = { id ->
                         viewModel.deleteHistory(id)
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Riwayat lokasi telah dihapus")
+                            snackbarHostState.showSnackbar(
+                                message = "Riwayat lokasi telah dihapus",
+                                duration = SnackbarDuration.Short
+                            )
                         }
                     },
                     onAddHistoryToFavorite = { hist ->
@@ -252,10 +287,53 @@ fun MainScreen(viewModel: MainViewModel) {
                     onDeleteFavorite = { fav ->
                         viewModel.deleteFavorite(fav)
                         coroutineScope.launch {
-                            snackbarHostState.showSnackbar("Favorit '${fav.name}' telah dihapus")
+                            snackbarHostState.showSnackbar(
+                                message = "Favorit '${fav.name}' telah dihapus",
+                                duration = SnackbarDuration.Short
+                            )
                         }
                     }
                 )
+
+                // Top-aligned notification banner that NEVER blocks the bottom controls (Start/Stop FAB or Coordinates)
+                SnackbarHost(
+                    hostState = snackbarHostState,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 10.dp, start = 16.dp, end = 16.dp)
+                        .zIndex(100f)
+                ) { data ->
+                    Card(
+                        shape = RoundedCornerShape(22.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF212121).copy(alpha = 0.94f)
+                        ),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp)
+                            .clickable { data.dismiss() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            val isStopped = data.visuals.message.contains("dihentikan", ignoreCase = true)
+                            Icon(
+                                imageVector = if (isStopped) Icons.Default.StopCircle else Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = if (isStopped) Color(0xFFEF5350) else Color(0xFF4CAF50),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = data.visuals.message,
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -388,6 +466,9 @@ fun MainScreen(viewModel: MainViewModel) {
             },
             onDeleteFavorite = { fav ->
                 viewModel.deleteFavorite(fav)
+            },
+            onReorderFavorites = { newOrderList ->
+                viewModel.reorderFavorites(newOrderList)
             },
             onDismiss = { showFavoritesSheet = false }
         )
