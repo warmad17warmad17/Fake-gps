@@ -48,6 +48,12 @@ import com.example.ui.theme.FakeGpsFavoriteRed
 import com.example.ui.theme.FakeGpsHistoryBlue
 import com.example.ui.theme.FakeGpsPrimary
 
+import androidx.compose.material.icons.filled.BatteryAlert
+import androidx.compose.material.icons.filled.BatteryChargingFull
+import com.example.util.BatteryOptimizationHelper
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+
 @Composable
 fun NavigationDrawerContent(
     isMocking: Boolean,
@@ -59,6 +65,7 @@ fun NavigationDrawerContent(
     onSearchCoordinate: () -> Unit,
     onShowFilter: () -> Unit,
     onShowDevGuide: () -> Unit,
+    onShowBatterySettings: () -> Unit,
     onCloseDrawer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -224,6 +231,36 @@ fun NavigationDrawerContent(
         )
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp, horizontal = 16.dp))
+
+        val isBatteryExempt = BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)
+
+        NavigationDrawerItem(
+            icon = {
+                Icon(
+                    imageVector = if (isBatteryExempt) Icons.Default.BatteryChargingFull else Icons.Default.BatteryAlert,
+                    contentDescription = null,
+                    tint = if (isBatteryExempt) Color(0xFF2E7D32) else Color(0xFFE65100)
+                )
+            },
+            label = {
+                Column {
+                    Text("Pengaturan Baterai Latar Belakang")
+                    Text(
+                        text = if (isBatteryExempt) "Bebas pembatasan (Optimal)" else "Perlu dimatikan agar tidak tertutup",
+                        fontSize = 11.sp,
+                        color = if (isBatteryExempt) Color(0xFF2E7D32) else Color(0xFFE65100)
+                    )
+                }
+            },
+            selected = false,
+            onClick = {
+                onCloseDrawer()
+                onShowBatterySettings()
+            },
+            modifier = Modifier
+                .padding(NavigationDrawerItemDefaults.ItemPadding)
+                .testTag("drawer_battery_optimization_item")
+        )
 
         NavigationDrawerItem(
             icon = { Icon(Icons.Default.Build, contentDescription = null, tint = Color(0xFFE65100)) },

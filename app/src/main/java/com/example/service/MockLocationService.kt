@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.example.FakeGpsApp
 import com.example.MainActivity
@@ -27,6 +28,7 @@ class MockLocationService : Service() {
     private val serviceScope = CoroutineScope(Dispatchers.Default)
     private var mockJob: Job? = null
     private lateinit var mockManager: MockLocationManager
+    private var wakeLock: PowerManager.WakeLock? = null
 
     companion object {
         const val ACTION_START = "com.example.service.ACTION_START"
@@ -104,7 +106,35 @@ class MockLocationService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null) {
+            // Service was killed by Android OS and recreated by START_STICKY
+            val prefs = getSharedPreferences(FavoritesWidgetProvider.PREFS_NAME, Context.MODE_PRIVATE)
+            val wasMocking = prefs.getBoolean(FavoritesWidgetProvider.KEY_IS_MOCKING, false)
+            if (wasMocking) {
+                val lat = prefs.getString(FavoritesWidgetProvider.KEY_ACTIVE_LAT, "0.0")?.toDoubleOrNull() ?: 0.0
+                val lng = prefs.getString(FavoritesWidgetProvider.KEY_ACTIVE_LNG, "0.0")?.toDoubleOrNull() ?: 0.0
+                val locName = prefs.getString(FavoritesWidgetProvider.KEY_ACTIVE_NAME, null)
+                if (!locName.isNullOrBlank()) {
+                    _activeLocationName.value = locName
+                }
+                val notification = buildNotification(lat, lng)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        FakeGpsApp.NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    )
+                } else {
+                    startForeground(FakeGpsApp.NOTIFICATION_ID, notification)
+                }
+                startMockLoop(lat, lng)
+            } else {
+                stopSelf()
+            }
+            return START_STICKY
+        }
+
+        when (intent.action) {
             ACTION_START -> {
                 val lat = intent.getDoubleExtra(EXTRA_LATITUDE, 0.0)
                 val lng = intent.getDoubleExtra(EXTRA_LONGITUDE, 0.0)
@@ -162,7 +192,30 @@ class MockLocationService : Service() {
                 stopSelf()
             }
         }
-        return START_NOT_STICKY
+        return START_STICKY
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        wakeLock = powerManager?.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "FakeGPS:MockLocationWakeLock"
+        )?.apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            if (wakeLock?.isHeld == true) {
+                wakeLock?.release()
+            }
+        } catch (_: Exception) {
+        } finally {
+            wakeLock = null
+        }
     }
 
     private fun startMockLoop(latitude: Double, longitude: Double) {
@@ -180,6 +233,7 @@ class MockLocationService : Service() {
             return
         }
 
+        acquireWakeLock()
         _isMockingRunning.value = true
         _currentMockCoords.value = Pair(latitude, longitude)
 
@@ -204,6 +258,7 @@ class MockLocationService : Service() {
     }
 
     private fun stopMockLoop() {
+        releaseWakeLock()
         mockJob?.cancel()
         mockJob = null
         mockManager.stopMocking()
@@ -256,6 +311,7 @@ class MockLocationService : Service() {
     }
 
     override fun onDestroy() {
+        releaseWakeLock()
         stopMockLoop()
         super.onDestroy()
     }

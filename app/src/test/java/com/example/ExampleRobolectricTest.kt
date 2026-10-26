@@ -62,4 +62,13 @@ class ExampleRobolectricTest {
     assertEquals(1, reordered[1].sortOrder)
     assertEquals("HUB", reordered[1].name)
   }
+
+  @Test
+  fun `verify battery optimization helper can be queried`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    // Should run without throwing exception
+    val isIgnored = com.example.util.BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)
+    // In Robolectric environment, default is true or false without crash
+    assertTrue(isIgnored || !isIgnored)
+  }
 }

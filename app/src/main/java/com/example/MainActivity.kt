@@ -58,9 +58,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.LocationFavoriteEntity
 import com.example.data.model.LocationHistoryEntity
 import com.example.ui.components.AddFavoriteDialog
+import com.example.ui.components.BatteryOptimizationDialog
 import com.example.ui.components.CoordinateInputDialog
 import com.example.ui.components.DeveloperOptionsGuideDialog
 import com.example.ui.components.EditFavoriteDialog
+import com.example.util.BatteryOptimizationHelper
 import com.example.ui.components.FavoritesBottomSheet
 import com.example.ui.components.FilterDialog
 import com.example.ui.components.HistoryBottomSheet
@@ -127,6 +129,7 @@ fun MainScreen(viewModel: MainViewModel) {
     var favoriteToEdit by remember { mutableStateOf<LocationFavoriteEntity?>(null) }
     var showCoordinateInputDialog by remember { mutableStateOf(false) }
     var showDevGuideDialog by remember { mutableStateOf(false) }
+    var showBatteryOptimizationDialog by remember { mutableStateOf(false) }
 
     var showHistorySheet by remember { mutableStateOf(false) }
     var showFavoritesSheet by remember { mutableStateOf(false) }
@@ -191,6 +194,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 onSearchCoordinate = { showCoordinateInputDialog = true },
                 onShowFilter = { showFilterDialog = true },
                 onShowDevGuide = { showDevGuideDialog = true },
+                onShowBatterySettings = { showBatteryOptimizationDialog = true },
                 onCloseDrawer = {
                     coroutineScope.launch { drawerState.close() }
                 }
@@ -219,6 +223,9 @@ fun MainScreen(viewModel: MainViewModel) {
                     },
                     onStartMock = {
                         viewModel.startMock(context)
+                        if (!BatteryOptimizationHelper.isIgnoringBatteryOptimizations(context)) {
+                            showBatteryOptimizationDialog = true
+                        }
                     },
                     onStopMock = {
                         viewModel.stopMock(context)
@@ -374,6 +381,13 @@ fun MainScreen(viewModel: MainViewModel) {
     if (showDevGuideDialog) {
         DeveloperOptionsGuideDialog(
             onDismiss = { showDevGuideDialog = false }
+        )
+    }
+
+    // Battery Optimization Dialog
+    if (showBatteryOptimizationDialog) {
+        BatteryOptimizationDialog(
+            onDismissRequest = { showBatteryOptimizationDialog = false }
         )
     }
 
