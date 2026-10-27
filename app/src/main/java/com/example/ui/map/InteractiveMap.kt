@@ -277,13 +277,15 @@ fun InteractiveMap(
                             } else null
 
                             if (tappedFav != null) {
-                                // Select favorite to inspect/edit without moving blue dot
+                                // Select favorite and automatically move blue dot to favorite location
                                 selectedFavoriteItem = tappedFav
                                 selectedHistoryItem = null
+                                onLocationSelected(tappedFav.latitude, tappedFav.longitude, true)
                             } else if (tappedHist != null) {
-                                // Select history to inspect/favorite without moving blue dot
+                                // Select history and automatically move blue dot to history location
                                 selectedHistoryItem = tappedHist
                                 selectedFavoriteItem = null
+                                onLocationSelected(tappedHist.latitude, tappedHist.longitude, true)
                             } else {
                                 // Tap on map: move the blue dot ONLY, leaving existing history and favorites intact
                                 selectedHistoryItem = null
@@ -395,9 +397,10 @@ fun InteractiveMap(
                         modifier = Modifier
                             .offset { IntOffset((sx - 15.dp.toPx()).roundToInt(), (sy - 34.dp.toPx()).roundToInt()) }
                             .clickable {
-                                // Select this history pin to view options WITHOUT moving the blue dot
+                                // Select this history pin and automatically move blue dot to its location
                                 selectedHistoryItem = hist
                                 selectedFavoriteItem = null
+                                onLocationSelected(hist.latitude, hist.longitude, true)
                             }
                             .testTag("history_pin_${hist.id}")
                     ) {
@@ -528,9 +531,10 @@ fun InteractiveMap(
                         modifier = Modifier
                             .offset { IntOffset((sx - 15.dp.toPx()).roundToInt(), (sy - 34.dp.toPx()).roundToInt()) }
                             .clickable {
-                                // Select this favorite pin to view callout WITHOUT moving the blue dot
+                                // Select this favorite pin and automatically move blue dot to its location
                                 selectedFavoriteItem = fav
                                 selectedHistoryItem = null
+                                onLocationSelected(fav.latitude, fav.longitude, true)
                             }
                             .testTag("favorite_pin_${fav.id}")
                     ) {
