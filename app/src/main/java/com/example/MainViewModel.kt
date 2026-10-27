@@ -6,8 +6,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.LocationFavoriteEntity
 import com.example.data.model.LocationHistoryEntity
+import com.example.data.repository.AddressSearchManager
 import com.example.data.repository.LocationRepository
 import com.example.service.MockLocationService
+import com.example.widget.FavoritesWidgetProvider
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,14 +17,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import com.example.widget.FavoritesWidgetProvider
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: LocationRepository = (application as FakeGpsApp).repository
-    val addressSearchManager = com.example.data.repository.AddressSearchManager()
+    val addressSearchManager = AddressSearchManager()
 
-    // Initial coordinates matching Surabaya - Gerbang Tol Banyu Urip from screenshot
+    // Initial coordinates matching Surabaya - Gerbang Tol Banyu Urip
     private val _selectedLat = MutableStateFlow(-7.253427)
     val selectedLat = _selectedLat.asStateFlow()
 
@@ -66,11 +67,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     description = "Gudang Surabaya"
                 )
             }
-            val existingHist = repository.allHistory.first()
-            if (existingHist.isEmpty()) {
-                repository.addHistory(-7.255100, 112.698000, "Jl. Tj. Sari")
-                repository.addHistory(-7.247500, 112.716000, "Jl. Dupak Rukun")
-            }
+            // Clean up history on app launch: removes items already in favorites and deduplicates repeating coordinates
+            repository.cleanAndDeduplicateHistory()
         }
     }
 
@@ -86,8 +84,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setLocationFromShared(lat: Double, lng: Double, label: String? = null) {
         selectLocation(lat, lng, fromUserAction = true)
-        viewModelScope.launch {
-            repository.addHistory(lat, lng, label ?: "Dibagikan dari aplikasi lain")
+        val isFav = favoritesList.value.any {
+            LocationRepository.isSameLocation(it.latitude, it.longitude, lat, lng)
+        }
+        if (!isFav) {
+            viewModelScope.launch {
+                repository.addHistory(lat, lng, label ?: "Dibagikan dari aplikasi lain")
+            }
         }
     }
 
@@ -102,7 +105,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val lng = _selectedLng.value
 
         val currentFav = favoritesList.value.find {
-            kotlin.math.abs(it.latitude - lat) < 0.0001 && kotlin.math.abs(it.longitude - lng) < 0.0001
+            LocationRepository.isSameLocation(it.latitude, it.longitude, lat, lng)
         }
 
         MockLocationService.start(
@@ -113,9 +116,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             favoriteId = currentFav?.id ?: -1L
         )
 
-        // Save to History when started
-        viewModelScope.launch {
-            repository.addHistory(lat, lng, currentFav?.name ?: "")
+        // Save to History when started ONLY if it is not already in favorites
+        if (currentFav == null) {
+            viewModelScope.launch {
+                repository.addHistory(lat, lng, "")
+            }
         }
     }
 
@@ -150,8 +155,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun deleteFavorite(favorite: LocationFavoriteEntity) {
+        deleteFavorite(favorite.id)
+    }
+
+    fun deleteFavorite(id: Long) {
         viewModelScope.launch {
-            repository.deleteFavorite(favorite.id)
+            repository.deleteFavorite(id)
             FavoritesWidgetProvider.updateAllWidgets(getApplication())
         }
     }

@@ -16,11 +16,17 @@ interface LocationDao {
     @Query("SELECT * FROM location_history ORDER BY timestamp DESC")
     fun getAllHistory(): Flow<List<LocationHistoryEntity>>
 
+    @Query("SELECT * FROM location_history ORDER BY timestamp ASC")
+    suspend fun getAllHistoryList(): List<LocationHistoryEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHistory(history: LocationHistoryEntity): Long
 
     @Query("DELETE FROM location_history WHERE id = :id")
     suspend fun deleteHistory(id: Long)
+
+    @Query("DELETE FROM location_history WHERE id IN (:ids)")
+    suspend fun deleteHistoryByIds(ids: List<Long>)
 
     @Query("DELETE FROM location_history")
     suspend fun clearAllHistory()

@@ -744,6 +744,10 @@ fun InteractiveMap(
             isMocking = isMocking,
             onStartMock = onStartMock,
             onStopMock = onStopMock,
+            currentLat = selectedLat,
+            currentLng = selectedLng,
+            favoritesList = favoritesList,
+            historyList = historyList,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .statusBarsPadding()

@@ -205,14 +205,6 @@ class FavoritesWidgetProvider : AppWidgetProvider() {
                     .apply()
 
                 MockLocationService.start(context, lat, lng, favName, favId)
-
-                val app = context.applicationContext as? FakeGpsApp
-                app?.let {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        it.repository.addHistory(lat, lng, favName)
-                    }
-                }
-
                 refreshAll(context)
             }
             ACTION_STOP_MOCK -> {
