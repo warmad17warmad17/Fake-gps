@@ -135,6 +135,44 @@ class TileManager(
             }
         }
 
+        // 4. Great-grandparent fallback (zoom - 3)
+        if (zoom > 3) {
+            val ggZoom = zoom - 3
+            val ggX = x shr 3
+            val ggY = y shr 3
+            val ggParent = getCachedTile(ggZoom, ggX, ggY)
+            if (ggParent != null) {
+                val qX = x and 7
+                val qY = y and 7
+                val w = ggParent.width / 8
+                val h = ggParent.height / 8
+                return TileRenderData(
+                    bitmap = ggParent,
+                    srcOffset = IntOffset(qX * w, qY * h),
+                    srcSize = IntSize(w, h)
+                )
+            }
+        }
+
+        // 5. Great-great-grandparent fallback (zoom - 4)
+        if (zoom > 4) {
+            val gggZoom = zoom - 4
+            val gggX = x shr 4
+            val gggY = y shr 4
+            val gggParent = getCachedTile(gggZoom, gggX, gggY)
+            if (gggParent != null) {
+                val qX = x and 15
+                val qY = y and 15
+                val w = gggParent.width / 16
+                val h = gggParent.height / 16
+                return TileRenderData(
+                    bitmap = gggParent,
+                    srcOffset = IntOffset(qX * w, qY * h),
+                    srcSize = IntSize(w, h)
+                )
+            }
+        }
+
         return null
     }
 
@@ -203,7 +241,27 @@ class TileManager(
                 }
             }
 
-            // Fallback: OpenStreetMap if Google tile fails
+            // Fallback 1: Google tile without scale=2
+            val googleStdUrl = "https://mt$sub.google.com/vt/lyrs=$lyrs&x=$x&y=$y&z=$zoom&hl=id"
+            val stdRequest = Request.Builder()
+                .url(googleStdUrl)
+                .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36")
+                .build()
+
+            client.newCall(stdRequest).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bytes = response.body?.bytes()
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                        if (bitmap != null) {
+                            memoryCache.put(key, bitmap.asImageBitmap())
+                            return true
+                        }
+                    }
+                }
+            }
+
+            // Fallback 2: OpenStreetMap if Google tile fails
             val osmUrl = "https://tile.openstreetmap.org/$zoom/$x/$y.png"
             val osmReq = Request.Builder()
                 .url(osmUrl)

@@ -113,7 +113,7 @@ fun InteractiveMap(
     // Map Camera state (Surabaya coordinates matching screenshot)
     var centerLat by remember { mutableDoubleStateOf(selectedLat) }
     var centerLng by remember { mutableDoubleStateOf(selectedLng) }
-    var zoomLevel by remember { mutableDoubleStateOf(16.5) }
+    var zoomLevel by remember { mutableDoubleStateOf(16.0) }
     var tileRefreshTrigger by remember { mutableIntStateOf(0) }
 
     // Synchronize camera when selected coordinates change externally (e.g. from search, dialog, or favorite)
@@ -158,39 +158,60 @@ fun InteractiveMap(
         val centerX = widthPx / 2f
         val centerY = heightPx / 2f
 
-        val zoomInt = zoomLevel.roundToInt().coerceIn(3, 22)
-        val effectiveZoom = zoomLevel.coerceIn(3.0, 22.0)
+        val currentZoom = zoomLevel.coerceIn(3.0, 22.0)
+        val baseZoom = floor(currentZoom).toInt().coerceIn(3, 21)
+        val zoomFraction = currentZoom - baseZoom
+        val scale = Math.pow(2.0, zoomFraction)
+        val scaledTileSize = MapProjection.TILE_SIZE * scale
+        val effectiveZoom = currentZoom
 
-        // Fetch visible Google Maps tiles outside Draw phase (keyed on integer zoom)
-        LaunchedEffect(centerLat, centerLng, zoomInt, widthPx, heightPx, tileManager.currentTileType) {
-            delay(40)
-            val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, zoomInt.toDouble())
-            val minWorldX = centerWorldX - centerX
-            val maxWorldX = centerWorldX + centerX
-            val minWorldY = centerWorldY - centerY
-            val maxWorldY = centerWorldY + centerY
-            val tileSize = MapProjection.TILE_SIZE
-            val minTileX = floor(minWorldX / tileSize).toInt()
-            val maxTileX = floor(maxWorldX / tileSize).toInt()
-            val minTileY = floor(minWorldY / tileSize).toInt()
-            val maxTileY = floor(maxWorldY / tileSize).toInt()
-            val maxTilesAcross = 1 shl zoomInt
+        val (centerWorldX, centerWorldY) = MapProjection.latLonToWorldPixel(centerLat, centerLng, currentZoom)
+        val minWorldX = centerWorldX - centerX
+        val maxWorldX = centerWorldX + centerX
+        val minWorldY = centerWorldY - centerY
+        val maxWorldY = centerWorldY + centerY
 
+        val minTileX = floor(minWorldX / scaledTileSize).toInt()
+        val maxTileX = floor(maxWorldX / scaledTileSize).toInt()
+        val minTileY = floor(minWorldY / scaledTileSize).toInt()
+        val maxTileY = floor(maxWorldY / scaledTileSize).toInt()
+        val maxTilesAcross = 1 shl baseZoom
+
+        // Fetch visible Google Maps tiles outside Draw phase (always synchronized with baseZoom)
+        LaunchedEffect(centerLat, centerLng, baseZoom, minTileX, maxTileX, minTileY, maxTileY, tileManager.currentTileType) {
             val neededTiles = mutableListOf<Triple<Int, Int, Int>>()
-            for (tx in minTileX..maxTileX) {
-                for (ty in minTileY..maxTileY) {
+            val parentTiles = mutableSetOf<Triple<Int, Int, Int>>()
+            val overviewTiles = mutableSetOf<Triple<Int, Int, Int>>()
+
+            for (tx in (minTileX - 1)..(maxTileX + 1)) {
+                for (ty in (minTileY - 1)..(maxTileY + 1)) {
                     if (ty in 0 until maxTilesAcross) {
                         val normTx = ((tx % maxTilesAcross) + maxTilesAcross) % maxTilesAcross
-                        neededTiles.add(Triple(zoomInt, normTx, ty))
-                        // Also prefetch parent tile at zoom 20 if zoomInt > 20 so fallback is always instantly ready
-                        if (zoomInt > 20) {
-                            val pDiff = zoomInt - 20
-                            neededTiles.add(Triple(20, normTx shr pDiff, ty shr pDiff))
+                        neededTiles.add(Triple(baseZoom, normTx, ty))
+
+                        // Pre-cache parent tile (baseZoom - 1) for instant fallback and zoom-out readiness
+                        if (baseZoom > 3) {
+                            val pZoom = baseZoom - 1
+                            parentTiles.add(Triple(pZoom, normTx shr 1, ty shr 1))
+                        }
+
+                        // Pre-cache grandparent tile (baseZoom - 2)
+                        if (baseZoom > 4) {
+                            val gpZoom = baseZoom - 2
+                            parentTiles.add(Triple(gpZoom, normTx shr 2, ty shr 2))
+                        }
+
+                        // Pre-cache city overview at zoom 13 so user NEVER sees blank screen on launch or zoom-out
+                        if (baseZoom > 13) {
+                            val diff = baseZoom - 13
+                            overviewTiles.add(Triple(13, normTx shr diff, ty shr diff))
                         }
                     }
                 }
             }
-            tileManager.requestTiles(neededTiles)
+
+            // Request overview & parent tiles FIRST so background renders immediately, then high-res tiles
+            tileManager.requestTiles(overviewTiles.toList() + parentTiles.toList() + neededTiles)
         }
 
         // Canvas for Slippy Tiles & Road Grid Background
@@ -280,7 +301,7 @@ fun InteractiveMap(
                             val (tapLat, tapLon) = MapProjection.worldPixelToLatLon(tapWorldX, tapWorldY, effectiveZoom)
                             centerLat = tapLat
                             centerLng = tapLon
-                            zoomLevel = (zoomLevel + 1.0).coerceAtMost(22.0)
+                            zoomLevel = (kotlin.math.round(zoomLevel) + 1.0).coerceAtMost(22.0)
                         }
                     )
                 }
@@ -807,7 +828,7 @@ fun InteractiveMap(
 
             // Zoom In
             IconButton(
-                onClick = { zoomLevel = (zoomLevel + 1.0).coerceAtMost(22.0) },
+                onClick = { zoomLevel = (kotlin.math.round(zoomLevel) + 1.0).coerceAtMost(22.0) },
                 modifier = Modifier
                     .size(38.dp)
                     .background(Color.White, CircleShape)
@@ -822,7 +843,7 @@ fun InteractiveMap(
 
             // Zoom Out
             IconButton(
-                onClick = { zoomLevel = (zoomLevel - 1.0).coerceAtLeast(3.0) },
+                onClick = { zoomLevel = (kotlin.math.round(zoomLevel) - 1.0).coerceAtLeast(3.0) },
                 modifier = Modifier
                     .size(38.dp)
                     .background(Color.White, CircleShape)
