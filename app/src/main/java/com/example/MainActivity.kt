@@ -1,15 +1,20 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.lifecycle.lifecycleScope
+import com.example.util.SharedLocationParser
+import java.util.Locale
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -89,9 +94,41 @@ class MainActivity : ComponentActivity() {
         // Sync and refresh home screen widgets when app opens
         FavoritesWidgetProvider.updateAllWidgets(this)
 
+        // Handle shared location intents (WhatsApp, Google Maps links, geo: URIs, etc.)
+        handleIncomingLocationIntent(intent)
+
         setContent {
             MyApplicationTheme {
                 MainScreen(viewModel = viewModel)
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIncomingLocationIntent(intent)
+    }
+
+    private fun handleIncomingLocationIntent(incomingIntent: Intent?) {
+        if (incomingIntent == null) return
+        val currentAction = incomingIntent.action ?: return
+        if (currentAction != Intent.ACTION_VIEW && currentAction != Intent.ACTION_SEND) return
+
+        lifecycleScope.launch {
+            val parsed = SharedLocationParser.parseIntent(
+                intent = incomingIntent,
+                addressSearchManager = viewModel.addressSearchManager
+            )
+            if (parsed != null) {
+                viewModel.setLocationFromShared(parsed.latitude, parsed.longitude, parsed.label)
+                val coordText = String.format(Locale.US, "%.6f, %.6f", parsed.latitude, parsed.longitude)
+                val message = if (!parsed.label.isNullOrBlank()) {
+                    "Lokasi dibuka dari aplikasi lain: ${parsed.label} ($coordText)"
+                } else {
+                    "Titik koordinat dibuka: $coordText"
+                }
+                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
             }
         }
     }

@@ -20,6 +20,7 @@ import com.example.widget.FavoritesWidgetProvider
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository: LocationRepository = (application as FakeGpsApp).repository
+    val addressSearchManager = com.example.data.repository.AddressSearchManager()
 
     // Initial coordinates matching Surabaya - Gerbang Tol Banyu Urip from screenshot
     private val _selectedLat = MutableStateFlow(-7.253427)
@@ -80,6 +81,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         // If actively mocking, update the active mock position seamlessly
         if (isMocking.value) {
             MockLocationService.updateLocation(getApplication(), lat, lng)
+        }
+    }
+
+    fun setLocationFromShared(lat: Double, lng: Double, label: String? = null) {
+        selectLocation(lat, lng, fromUserAction = true)
+        viewModelScope.launch {
+            repository.addHistory(lat, lng, label ?: "Dibagikan dari aplikasi lain")
         }
     }
 
