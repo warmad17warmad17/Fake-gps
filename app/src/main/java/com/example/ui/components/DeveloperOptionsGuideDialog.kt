@@ -60,7 +60,7 @@ fun DeveloperOptionsGuideDialog(
                     .padding(vertical = 4.dp)
             ) {
                 Text(
-                    text = "Agar sistem Android mengizinkan Fake GPS menyuntikkan lokasi tiruan:",
+                    text = "Agar sistem Android mengizinkan My Maps menyuntikkan lokasi tiruan:",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -69,7 +69,7 @@ fun DeveloperOptionsGuideDialog(
                 StepItem(number = "2", text = "Ketuk 'Nomor Bentukan' (Build Number) sebanyak 7 kali hingga Opsi Pengembang aktif.")
                 StepItem(number = "3", text = "Buka 'Opsi Pengembang' (Developer Options).")
                 StepItem(number = "4", text = "Cari menu 'Pilih aplikasi lokasi tiruan' (Select mock location app).")
-                StepItem(number = "5", text = "Pilih aplikasi 'Fake GPS'.")
+                StepItem(number = "5", text = "Pilih aplikasi 'My Maps'.")
             }
         },
         confirmButton = {

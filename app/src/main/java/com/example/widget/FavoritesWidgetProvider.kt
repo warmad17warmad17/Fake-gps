@@ -74,7 +74,7 @@ class FavoritesWidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.widget_fake_gps)
 
             // 1. Header texts
-            views.setTextViewText(R.id.widget_title, "Fake GPS")
+            views.setTextViewText(R.id.widget_title, context.getString(R.string.app_name))
             val subtitleText = if (isMocking && activeName.isNotBlank()) {
                 "Selected Location: $activeName"
             } else if (isMocking) {

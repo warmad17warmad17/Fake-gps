@@ -35,20 +35,20 @@ object WidgetHelper {
                 appWidgetManager.requestPinAppWidget(provider, null, successCallback)
                 Toast.makeText(
                     context,
-                    "Silakan konfirmasi untuk memasang Widget Fake GPS ke Layar Utama",
+                    "Silakan konfirmasi untuk memasang Widget My Maps ke Layar Utama",
                     Toast.LENGTH_SHORT
                 ).show()
             } else {
                 Toast.makeText(
                     context,
-                    "Tekan lama di layar utama HP Anda, pilih menu 'Widget' lalu cari 'Fake GPS Favorit'.",
+                    "Tekan lama di layar utama HP Anda, pilih menu 'Widget' lalu cari 'My Maps Favorit'.",
                     Toast.LENGTH_LONG
                 ).show()
             }
         } else {
             Toast.makeText(
                 context,
-                "Tekan lama di layar utama HP Anda, pilih menu 'Widget' lalu cari 'Fake GPS Favorit'.",
+                "Tekan lama di layar utama HP Anda, pilih menu 'Widget' lalu cari 'My Maps Favorit'.",
                 Toast.LENGTH_LONG
             ).show()
         }

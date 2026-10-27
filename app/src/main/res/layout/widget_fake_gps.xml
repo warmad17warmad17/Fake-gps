@@ -29,7 +29,7 @@
                 android:id="@+id/widget_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Fake GPS"
+                android:text="@string/app_name"
                 android:textColor="#FFFFFF"
                 android:textSize="17sp"
                 android:textStyle="bold" />
@@ -51,7 +51,7 @@
             android:id="@+id/widget_header_action"
             android:layout_width="38dp"
             android:layout_height="38dp"
-            android:contentDescription="Stop / Buka Fake GPS"
+            android:contentDescription="Stop / Buka My Maps"
             android:padding="6dp"
             android:background="@android:color/transparent" />
     </LinearLayout>

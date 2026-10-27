@@ -86,7 +86,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startMock(context: Context) {
         val mockManager = com.example.service.MockLocationManager(context)
         if (!mockManager.isMockLocationPermitted()) {
-            MockLocationService.setMockError("Aplikasi belum diatur sebagai 'Aplikasi Lokasi Tiruan' di Opsi Pengembang (Developer Options).\n\nSilakan buka Opsi Pengembang, cari 'Pilih aplikasi lokasi tiruan', lalu pilih 'Fake GPS'.")
+            MockLocationService.setMockError("Aplikasi belum diatur sebagai 'Aplikasi Lokasi Tiruan' di Opsi Pengembang (Developer Options).\n\nSilakan buka Opsi Pengembang, cari 'Pilih aplikasi lokasi tiruan', lalu pilih 'My Maps'.")
             return
         }
 

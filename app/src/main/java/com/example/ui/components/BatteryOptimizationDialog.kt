@@ -150,7 +150,7 @@ fun BatteryOptimizationDialog(
                                 text = if (isIgnored)
                                     "Aplikasi diizinkan berjalan terus di latar belakang tanpa tertutup otomatis."
                                 else
-                                    "Sistem HP dapat menghentikan Fake GPS saat layar mati jika pengoptimalan belum dimatikan.",
+                                    "Sistem HP dapat menghentikan My Maps saat layar mati jika pengoptimalan belum dimatikan.",
                                 fontSize = 11.sp,
                                 color = Color.DarkGray
                             )
@@ -202,7 +202,7 @@ fun BatteryOptimizationDialog(
                     Column {
                         Text("Mulai Otomatis (Autostart)", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                         Text(
-                            "Aktifkan 'Mulai Otomatis' agar Fake GPS tetap menyala saat HP dinyalakan kembali.",
+                            "Aktifkan 'Mulai Otomatis' agar My Maps tetap menyala saat HP dinyalakan kembali.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -216,7 +216,7 @@ fun BatteryOptimizationDialog(
                     Column {
                         Text("Kunci Aplikasi di Layar Recent Apps", fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
                         Text(
-                            "Buka Recent Apps (tombol kotak bawah), tekan dan tahan Fake GPS, lalu ketuk ikon Gembok agar tidak terbersihkan.",
+                            "Buka Recent Apps (tombol kotak bawah), tekan dan tahan My Maps, lalu ketuk ikon Gembok agar tidak terbersihkan.",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -21,7 +21,7 @@ class FakeGpsApp : Application() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Fake GPS Service",
+                "My Maps Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
                 description = "Notifikasi status pemalsuan lokasi Mock GPS"

@@ -74,7 +74,7 @@ object BatteryOptimizationHelper {
             val intent = Intent().apply {
                 component = ComponentName("com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity")
                 putExtra("package_name", context.packageName)
-                putExtra("package_label", "Fake GPS")
+                putExtra("package_label", "My Maps")
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
             }
             context.startActivity(intent)
