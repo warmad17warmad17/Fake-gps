@@ -169,12 +169,18 @@ class MockLocationService : Service() {
                     startForeground(FakeGpsApp.NOTIFICATION_ID, notification)
                 }
 
-                startMockLoop(lat, lng)
+                if (_isMockingRunning.value) {
+                    // Already actively mocking: seamlessly push new coordinates without tearing down providers!
+                    pushImmediateLocation(lat, lng)
+                    updateNotification(lat, lng)
+                } else {
+                    startMockLoop(lat, lng)
+                }
             }
             ACTION_UPDATE_COORDS -> {
                 val lat = intent.getDoubleExtra(EXTRA_LATITUDE, 0.0)
                 val lng = intent.getDoubleExtra(EXTRA_LONGITUDE, 0.0)
-                _currentMockCoords.value = Pair(lat, lng)
+                pushImmediateLocation(lat, lng)
                 updateNotification(lat, lng)
             }
             ACTION_STOP -> {
@@ -193,6 +199,20 @@ class MockLocationService : Service() {
             }
         }
         return START_STICKY
+    }
+
+    private fun pushImmediateLocation(latitude: Double, longitude: Double) {
+        _currentMockCoords.value = Pair(latitude, longitude)
+        mockManager.injectLocation(latitude, longitude)
+
+        // Rapid burst injections (at +25ms and +75ms) so background location listeners
+        // and polling apps instantly register the coordinate switch without waiting
+        serviceScope.launch {
+            delay(25)
+            mockManager.injectLocation(latitude, longitude)
+            delay(50)
+            mockManager.injectLocation(latitude, longitude)
+        }
     }
 
     private fun acquireWakeLock() {
@@ -235,7 +255,7 @@ class MockLocationService : Service() {
 
         acquireWakeLock()
         _isMockingRunning.value = true
-        _currentMockCoords.value = Pair(latitude, longitude)
+        pushImmediateLocation(latitude, longitude)
 
         mockJob?.cancel()
         mockJob = serviceScope.launch {
@@ -252,7 +272,7 @@ class MockLocationService : Service() {
                         break
                     }
                 }
-                delay(1000) // Continuous pulse every 1s
+                delay(500) // Fast 500ms continuous stream for real-time location accuracy in all other apps
             }
         }
     }

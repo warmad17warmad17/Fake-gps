@@ -83,6 +83,14 @@ import androidx.compose.ui.zIndex
 import com.example.ui.components.GoogleMapsSearchBar
 import kotlin.math.floor
 import kotlin.math.roundToInt
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.LocationManager
+import androidx.core.content.ContextCompat
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 
 @Composable
 fun InteractiveMap(
@@ -149,6 +157,66 @@ fun InteractiveMap(
     LaunchedEffect(Unit) {
         tileManager.tileRefreshTrigger.collect {
             tileRefreshTrigger++
+        }
+    }
+
+    fun moveToRealLocation() {
+        val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        if (!fineGranted && !coarseGranted) {
+            centerLat = selectedLat
+            centerLng = selectedLng
+            return
+        }
+
+        try {
+            val fusedClient = LocationServices.getFusedLocationProviderClient(context)
+            val cts = CancellationTokenSource()
+            fusedClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                .addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        onLocationSelected(loc.latitude, loc.longitude, true)
+                        centerLat = loc.latitude
+                        centerLng = loc.longitude
+                    } else {
+                        fusedClient.lastLocation.addOnSuccessListener { lastLoc ->
+                            if (lastLoc != null) {
+                                onLocationSelected(lastLoc.latitude, lastLoc.longitude, true)
+                                centerLat = lastLoc.latitude
+                                centerLng = lastLoc.longitude
+                            } else {
+                                val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                                val best = lm?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                                    ?: lm?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                                if (best != null) {
+                                    onLocationSelected(best.latitude, best.longitude, true)
+                                    centerLat = best.latitude
+                                    centerLng = best.longitude
+                                } else {
+                                    centerLat = selectedLat
+                                    centerLng = selectedLng
+                                }
+                            }
+                        }
+                    }
+                }
+                .addOnFailureListener {
+                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                    val best = lm?.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                        ?: lm?.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                    if (best != null) {
+                        onLocationSelected(best.latitude, best.longitude, true)
+                        centerLat = best.latitude
+                        centerLng = best.longitude
+                    } else {
+                        centerLat = selectedLat
+                        centerLng = selectedLng
+                    }
+                }
+        } catch (e: SecurityException) {
+            centerLat = selectedLat
+            centerLng = selectedLng
         }
     }
 
@@ -790,11 +858,15 @@ fun InteractiveMap(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Recenter to target / Mock position
+            // Recenter to target / Mock position or Real GPS position
             IconButton(
                 onClick = {
-                    centerLat = selectedLat
-                    centerLng = selectedLng
+                    if (!isMocking) {
+                        moveToRealLocation()
+                    } else {
+                        centerLat = selectedLat
+                        centerLng = selectedLng
+                    }
                 },
                 modifier = Modifier
                     .size(44.dp)
@@ -803,8 +875,8 @@ fun InteractiveMap(
             ) {
                 Icon(
                     imageVector = Icons.Default.GpsFixed,
-                    contentDescription = "Pusatkan ke Lokasi",
-                    tint = Color(0xFF424242)
+                    contentDescription = if (isMocking) "Pusatkan ke Titik Mock" else "Deteksi Lokasi GPS Asli",
+                    tint = if (!isMocking) FakeGpsPrimary else Color(0xFF424242)
                 )
             }
 
