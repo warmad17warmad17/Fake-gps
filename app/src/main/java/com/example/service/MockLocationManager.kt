@@ -10,24 +10,34 @@ import android.os.SystemClock
 import android.util.Log
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import kotlin.random.Random
 
+/**
+ * Manages Mock Location injection modeled after industry standard fake GPS implementations
+ * (such as com.blogspot.newapphorizons.fakegps / Lexa Fake GPS).
+ *
+ * Key criteria for maximum compatibility and realistic emulation:
+ * 1. Hardware-accurate provider criteria (GPS requires satellite and POWER_HIGH; Network requires cell/network).
+ * 2. Realistic GPS accuracy (3.0m - 4.8m) instead of artificial flat 1.0m.
+ * 3. Complete satellite and constellation metadata in extras.
+ * 4. Realistic altitude, vertical accuracy, and speed/bearing metrics.
+ * 5. No explicit manual `isMock = true` flagging.
+ * 6. Clean separation: GPS and Network handled by LocationManager; Fused handled by FusedLocationProviderClient.
+ */
 class MockLocationManager(private val context: Context) {
 
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private val fusedClient: FusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(context)
 
-    private val providers = mutableListOf(
+    private val testProviders = listOf(
         LocationManager.GPS_PROVIDER,
         LocationManager.NETWORK_PROVIDER
-    ).apply {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                add(LocationManager.FUSED_PROVIDER)
-            } catch (_: Exception) {}
-        }
-    }
+    )
 
     private var isMockingActive = false
+
+    // Base realistic altitude (meters above sea level) with micro-fluctuation
+    private var baseAltitude = 24.5
 
     fun isMockLocationPermitted(): Boolean {
         val testProvider = "fake_gps_test_probe"
@@ -53,54 +63,75 @@ class MockLocationManager(private val context: Context) {
 
     fun startMocking(): Result<Unit> {
         if (isMockingActive) {
-            // Already started and registered; keep existing listeners in other apps connected!
             return Result.success(Unit)
         }
 
         return try {
-            // Enable mock mode on Fused Location Client
+            // 1. Enable mock mode in Google Play Services Fused Location Client
             try {
                 fusedClient.setMockMode(true)
             } catch (e: Exception) {
-                Log.w("MockLocationManager", "Warning on setMockMode(true)", e)
+                Log.w("MockLocationManager", "Warning setting fused mock mode", e)
             }
 
-            // Setup test providers in LocationManager
-            for (provider in providers) {
-                try {
-                    locationManager.removeTestProvider(provider)
-                } catch (_: Exception) {}
+            // 2. Register GPS_PROVIDER with authentic GPS hardware criteria
+            try {
+                locationManager.removeTestProvider(LocationManager.GPS_PROVIDER)
+            } catch (_: Exception) {}
 
-                try {
-                    locationManager.addTestProvider(
-                        provider,
-                        false, // requiresNetwork
-                        false, // requiresSatellite
-                        false, // requiresCell
-                        false, // hasMonetaryCost
-                        true,  // supportsAltitude
-                        true,  // supportsSpeed
-                        true,  // supportsBearing
-                        Criteria.POWER_LOW,
-                        Criteria.ACCURACY_FINE
-                    )
-                    locationManager.setTestProviderEnabled(provider, true)
+            locationManager.addTestProvider(
+                LocationManager.GPS_PROVIDER,
+                false, // requiresNetwork
+                true,  // requiresSatellite (real GPS requires satellites!)
+                false, // requiresCell
+                false, // hasMonetaryCost
+                true,  // supportsAltitude
+                true,  // supportsSpeed
+                true,  // supportsBearing
+                Criteria.POWER_HIGH, // Real GPS receiver has high power requirement
+                Criteria.ACCURACY_FINE
+            )
+            locationManager.setTestProviderEnabled(LocationManager.GPS_PROVIDER, true)
 
-                    @Suppress("DEPRECATION")
-                    locationManager.setTestProviderStatus(
-                        provider,
-                        android.location.LocationProvider.AVAILABLE,
-                        null,
-                        System.currentTimeMillis()
-                    )
-                } catch (e: Exception) {
-                    Log.w("MockLocationManager", "Failed to register test provider $provider", e)
-                }
-            }
+            @Suppress("DEPRECATION")
+            locationManager.setTestProviderStatus(
+                LocationManager.GPS_PROVIDER,
+                android.location.LocationProvider.AVAILABLE,
+                null,
+                System.currentTimeMillis()
+            )
+
+            // 3. Register NETWORK_PROVIDER with authentic Network criteria
+            try {
+                locationManager.removeTestProvider(LocationManager.NETWORK_PROVIDER)
+            } catch (_: Exception) {}
+
+            locationManager.addTestProvider(
+                LocationManager.NETWORK_PROVIDER,
+                true,  // requiresNetwork
+                false, // requiresSatellite
+                true,  // requiresCell (cell/wifi)
+                false, // hasMonetaryCost
+                false, // supportsAltitude
+                false, // supportsSpeed
+                false, // supportsBearing
+                Criteria.POWER_LOW,
+                Criteria.ACCURACY_COARSE
+            )
+            locationManager.setTestProviderEnabled(LocationManager.NETWORK_PROVIDER, true)
+
+            @Suppress("DEPRECATION")
+            locationManager.setTestProviderStatus(
+                LocationManager.NETWORK_PROVIDER,
+                android.location.LocationProvider.AVAILABLE,
+                null,
+                System.currentTimeMillis()
+            )
+
             isMockingActive = true
             Result.success(Unit)
         } catch (se: SecurityException) {
-            Log.e("MockLocationManager", "SecurityException - Mock location not enabled in developer options", se)
+            Log.e("MockLocationManager", "SecurityException starting mock provider", se)
             Result.failure(se)
         } catch (e: Exception) {
             Log.e("MockLocationManager", "Exception starting mock provider", e)
@@ -113,62 +144,84 @@ class MockLocationManager(private val context: Context) {
             val nowMs = System.currentTimeMillis()
             val elapsedNanos = SystemClock.elapsedRealtimeNanos()
 
+            // Realistic accuracy between 3.2m and 4.6m (never a static, synthetic 1.0f)
+            val randomFactor = (Random.nextInt(0, 15) - 7) * 0.1f // -0.7f to +0.7f
+            val realisticGpsAccuracy = 3.8f + randomFactor
+            val realisticAltitude = baseAltitude + ((Random.nextInt(0, 10) - 5) * 0.05)
+
+            // 1. Authentic GPS Location with satellite constellation extras
             val gpsExtras = Bundle().apply {
                 putInt("satellites", 12)
-                putInt("maxSatellites", 12)
+                putInt("maxSatellites", 16)
+                putString("extraType", "gps")
+                putInt("ephemerisMask", 0x1FFF)
+                putInt("almanacMask", 0x1FFF)
+                putInt("usedInFixMask", 0x1FFF)
             }
 
-            for (provider in providers) {
-                val mockLoc = Location(provider).apply {
-                    this.latitude = latitude
-                    this.longitude = longitude
-                    altitude = 15.0
-                    time = nowMs
-                    elapsedRealtimeNanos = elapsedNanos
-                    accuracy = 1.0f
-                    speed = 0.0f
-                    bearing = 0.0f
-                    extras = gpsExtras
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        bearingAccuracyDegrees = 0.1f
-                        verticalAccuracyMeters = 0.5f
-                        speedAccuracyMetersPerSecond = 0.1f
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        isMock = true
-                    }
-                }
-
-                try {
-                    locationManager.setTestProviderLocation(provider, mockLoc)
-                } catch (e: Exception) {
-                    Log.w("MockLocationManager", "Failed to set test provider location for $provider", e)
-                }
-            }
-
-            // Also inject into FusedLocationProviderClient
-            val fusedMockLoc = Location("fused").apply {
+            val gpsLoc = Location(LocationManager.GPS_PROVIDER).apply {
                 this.latitude = latitude
                 this.longitude = longitude
-                altitude = 15.0
+                altitude = realisticAltitude
                 time = nowMs
                 elapsedRealtimeNanos = elapsedNanos
-                accuracy = 1.0f
+                accuracy = realisticGpsAccuracy
                 speed = 0.0f
                 bearing = 0.0f
                 extras = gpsExtras
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    bearingAccuracyDegrees = 0.1f
-                    verticalAccuracyMeters = 0.5f
+                    verticalAccuracyMeters = 1.6f
+                    bearingAccuracyDegrees = 1.0f
                     speedAccuracyMetersPerSecond = 0.1f
-                }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    isMock = true
                 }
             }
 
             try {
-                fusedClient.setMockLocation(fusedMockLoc)
+                locationManager.setTestProviderLocation(LocationManager.GPS_PROVIDER, gpsLoc)
+            } catch (e: Exception) {
+                Log.w("MockLocationManager", "Failed to set GPS test provider location", e)
+            }
+
+            // 2. Authentic Network Location (coarse accuracy, wifi/cell extras)
+            val netExtras = Bundle().apply {
+                putString("networkLocationType", "wifi")
+            }
+
+            val netLoc = Location(LocationManager.NETWORK_PROVIDER).apply {
+                this.latitude = latitude
+                this.longitude = longitude
+                time = nowMs
+                elapsedRealtimeNanos = elapsedNanos
+                accuracy = 16.0f + (Random.nextInt(0, 40) * 0.1f) // 16.0m - 20.0m coarse
+                extras = netExtras
+            }
+
+            try {
+                locationManager.setTestProviderLocation(LocationManager.NETWORK_PROVIDER, netLoc)
+            } catch (e: Exception) {
+                Log.w("MockLocationManager", "Failed to set Network test provider location", e)
+            }
+
+            // 3. Google Play Services Fused Location Client
+            val fusedLoc = Location("fused").apply {
+                this.latitude = latitude
+                this.longitude = longitude
+                altitude = realisticAltitude
+                time = nowMs
+                elapsedRealtimeNanos = elapsedNanos
+                accuracy = realisticGpsAccuracy
+                speed = 0.0f
+                bearing = 0.0f
+                extras = gpsExtras
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    verticalAccuracyMeters = 1.6f
+                    bearingAccuracyDegrees = 1.0f
+                    speedAccuracyMetersPerSecond = 0.1f
+                }
+            }
+
+            try {
+                fusedClient.setMockLocation(fusedLoc)
             } catch (e: Exception) {
                 Log.w("MockLocationManager", "Failed to set fused mock location", e)
             }
@@ -183,13 +236,14 @@ class MockLocationManager(private val context: Context) {
 
     fun stopMocking() {
         isMockingActive = false
+
         try {
             fusedClient.setMockMode(false)
         } catch (e: Exception) {
             Log.w("MockLocationManager", "Failed to disable fused mock mode", e)
         }
 
-        for (provider in providers) {
+        for (provider in testProviders) {
             try {
                 locationManager.setTestProviderEnabled(provider, false)
                 locationManager.removeTestProvider(provider)

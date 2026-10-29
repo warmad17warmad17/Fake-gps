@@ -272,7 +272,7 @@ class MockLocationService : Service() {
                         break
                     }
                 }
-                delay(500) // Fast 500ms continuous stream for real-time location accuracy in all other apps
+                delay(1000) // Standard 1Hz GPS frequency matching genuine hardware receivers
             }
         }
     }
