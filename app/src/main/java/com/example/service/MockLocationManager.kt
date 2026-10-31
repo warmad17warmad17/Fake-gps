@@ -243,13 +243,54 @@ class MockLocationManager(private val context: Context) {
             Log.w("MockLocationManager", "Failed to disable fused mock mode", e)
         }
 
+        // CRITICAL FIX: Do NOT call setTestProviderEnabled(false) before removeTestProvider.
+        // Calling setTestProviderEnabled(false) can leave the physical hardware GPS provider
+        // flagged as disabled in system settings. Calling removeTestProvider directly cleanly
+        // detaches the mock layer and re-attaches the physical hardware GPS driver.
         for (provider in testProviders) {
             try {
-                locationManager.setTestProviderEnabled(provider, false)
                 locationManager.removeTestProvider(provider)
             } catch (e: Exception) {
                 Log.w("MockLocationManager", "Failed to clean up test provider $provider", e)
             }
+        }
+
+        // Kickstart hardware GPS chip so real satellites and apps like GPS Locker can bind immediately
+        kickstartHardwareGps()
+    }
+
+    /**
+     * Re-awakens the physical hardware GPS driver on the device.
+     * When a test provider is removed, the Android LocationManagerService and GNSS HAL
+     * may remain in an idle or cold state. A brief hardware update request wakes up
+     * the physical GPS receiver so real satellite ephemeris data is acquired without delay.
+     */
+    private fun kickstartHardwareGps() {
+        try {
+            val listener = object : android.location.LocationListener {
+                override fun onLocationChanged(loc: Location) {}
+                @Deprecated("Deprecated in Java")
+                override fun onStatusChanged(p: String?, s: Int, e: Bundle?) {}
+                override fun onProviderEnabled(p: String) {}
+                override fun onProviderDisabled(p: String) {}
+            }
+
+            locationManager.requestLocationUpdates(
+                LocationManager.GPS_PROVIDER,
+                1000L,
+                0f,
+                listener,
+                android.os.Looper.getMainLooper()
+            )
+
+            // Remove listener after 2 seconds to release battery once HAL is re-engaged
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                try {
+                    locationManager.removeUpdates(listener)
+                } catch (_: Exception) {}
+            }, 2000L)
+        } catch (e: Exception) {
+            Log.w("MockLocationManager", "kickstartHardwareGps notice: ${e.message}")
         }
     }
 }

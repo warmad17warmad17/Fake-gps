@@ -170,6 +170,7 @@ fun MainScreen(viewModel: MainViewModel) {
     var showCoordinateInputDialog by remember { mutableStateOf(false) }
     var showDevGuideDialog by remember { mutableStateOf(false) }
     var showBatteryOptimizationDialog by remember { mutableStateOf(false) }
+    var showGpsLockerDialog by remember { mutableStateOf(false) }
 
     var showHistorySheet by remember { mutableStateOf(false) }
     var showFavoritesSheet by remember { mutableStateOf(false) }
@@ -301,6 +302,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 onShowFilter = { showFilterDialog = true },
                 onShowDevGuide = { showDevGuideDialog = true },
                 onShowBatterySettings = { showBatteryOptimizationDialog = true },
+                onShowGpsLockerIntegration = { showGpsLockerDialog = true },
                 onCloseDrawer = {
                     coroutineScope.launch { drawerState.close() }
                 }
@@ -338,7 +340,7 @@ fun MainScreen(viewModel: MainViewModel) {
                         coroutineScope.launch {
                             snackbarHostState.currentSnackbarData?.dismiss()
                             snackbarHostState.showSnackbar(
-                                message = "Mock Location dihentikan",
+                                message = "Mock dihentikan • GPS fisik pulih (Locker siap dalam 10 dtk)",
                                 duration = SnackbarDuration.Short
                             )
                         }
@@ -494,6 +496,13 @@ fun MainScreen(viewModel: MainViewModel) {
     if (showBatteryOptimizationDialog) {
         BatteryOptimizationDialog(
             onDismissRequest = { showBatteryOptimizationDialog = false }
+        )
+    }
+
+    // GPS Locker (SilentLexx UA) Integration Dialog
+    if (showGpsLockerDialog) {
+        com.example.ui.components.GpsLockerIntegrationDialog(
+            onDismiss = { showGpsLockerDialog = false }
         )
     }
 

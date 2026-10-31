@@ -71,6 +71,7 @@ fun NavigationDrawerContent(
     onShowFilter: () -> Unit,
     onShowDevGuide: () -> Unit,
     onShowBatterySettings: () -> Unit,
+    onShowGpsLockerIntegration: () -> Unit = {},
     onCloseDrawer: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -304,6 +305,35 @@ fun NavigationDrawerContent(
             modifier = Modifier
                 .padding(NavigationDrawerItemDefaults.ItemPadding)
                 .testTag("drawer_dev_guide_item")
+        )
+
+        val isGpsLockerInstalled = com.example.util.GpsLockerBridge.isGpsLockerInstalled(context)
+        NavigationDrawerItem(
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.PinDrop,
+                    contentDescription = null,
+                    tint = if (isGpsLockerInstalled) Color(0xFF2E7D32) else FakeGpsPrimary
+                )
+            },
+            label = {
+                Column {
+                    Text("Sinkronisasi GPS Locker")
+                    Text(
+                        text = if (isGpsLockerInstalled) "Terhubung • Otomatis bergantian" else "Mati otomatis saat mock aktif",
+                        fontSize = 11.sp,
+                        color = if (isGpsLockerInstalled) Color(0xFF2E7D32) else Color.Gray
+                    )
+                }
+            },
+            selected = false,
+            onClick = {
+                onCloseDrawer()
+                onShowGpsLockerIntegration()
+            },
+            modifier = Modifier
+                .padding(NavigationDrawerItemDefaults.ItemPadding)
+                .testTag("drawer_gps_locker_item")
         )
 
         NavigationDrawerItem(

@@ -20,6 +20,12 @@
         android:maxSdkVersion="28"
         tools:ignore="ScopedStorage" />
 
+    <queries>
+        <package android:name="com.silentlexx.gpslock" />
+        <package android:name="com.silentlexx.gpslockprime" />
+        <package android:name="com.silentlexx.gpslocker" />
+    </queries>
+
     <application
         android:name=".FakeGpsApp"
         android:allowBackup="true"

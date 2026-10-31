@@ -255,6 +255,10 @@ class MockLocationService : Service() {
 
         acquireWakeLock()
         _isMockingRunning.value = true
+
+        // Automatically pause/stop GPS Locker so it does not conflict with mock location
+        com.example.util.GpsLockerBridge.onMockStarted(this)
+
         pushImmediateLocation(latitude, longitude)
 
         mockJob?.cancel()
@@ -284,6 +288,9 @@ class MockLocationService : Service() {
         mockManager.stopMocking()
         _isMockingRunning.value = false
         _currentMockCoords.value = null
+
+        // Trigger 10-second stabilization timer before commanding GPS Locker to resume locking real GPS
+        com.example.util.GpsLockerBridge.onMockStopped(this)
     }
 
     private fun buildNotification(latitude: Double, longitude: Double): Notification {
